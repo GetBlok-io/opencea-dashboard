@@ -1,6 +1,6 @@
 # Farmhand Dashboard
 
-A small Next.js dashboard for viewing the latest farm device telemetry from the PostgreSQL `reported_state` table.
+A small Next.js dashboard for viewing the latest farm device telemetry from the PostgreSQL `reported_state` table..
 
 ## What it does
 
