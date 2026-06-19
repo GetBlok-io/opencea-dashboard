@@ -1,12 +1,14 @@
-# Reported State Dashboard
+# Farmhand Dashboard
 
-A small Next.js dashboard for viewing the latest device telemetry from the PostgreSQL `reported_state` table.
+A small Next.js dashboard for viewing the latest farm device telemetry from the PostgreSQL `reported_state` table.
 
 ## What it does
 
 - Reads the latest row per `device_id` from PostgreSQL.
 - Displays connected/disconnected status.
 - Displays common telemetry values such as pH, EC, temperature, RH, CO2, analog values, pumps, and outputs.
+- Enriches device telemetry with friendly labels from the `module_list` table.
+- Provides a Celsius/Fahrenheit toggle. Source temperature values are assumed to be Celsius.
 - Includes a JSON details view for each device.
 - Auto-refreshes through `/api/reported-state/latest`.
 
@@ -14,6 +16,7 @@ A small Next.js dashboard for viewing the latest device telemetry from the Postg
 
 - Node.js 20+
 - PostgreSQL database with the `reported_state` table already created
+- PostgreSQL database with the `module_list` table created from `db/module_list_schema.sql`
 - `DATABASE_URL` environment variable
 
 ## Local setup
@@ -43,9 +46,47 @@ Optional if your database requires SSL:
 PGSSLMODE=require
 ```
 
+## Create the module_list table
+
+Run this SQL against the same database used by the dashboard:
+
+```bash
+psql "$DATABASE_URL" -f db/module_list_schema.sql
+```
+
+Or paste the contents of `db/module_list_schema.sql` into your PostgreSQL query console.
+
+## Import module mappings
+
+Install the importer requirement in your Python virtual environment:
+
+```bash
+pip install -r scripts/requirements.txt
+```
+
+Set your local database URL:
+
+```bash
+export DATABASE_URL="postgresql://user:password@host:5432/database"
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:DATABASE_URL="postgresql://user:password@host:5432/database"
+```
+
+Then import your module mapping file:
+
+```bash
+python scripts/import_module_list.py /path/to/module_list.json
+```
+
+The importer supports both clean JSON and copied page text that contains the current module mapping JSON.
+
 ## Railway deployment
 
-1. Push this folder to a GitHub repository.
+1. Push this folder to your GitHub repository named `farmhand-dashboard`.
 2. In Railway, create a new project from the GitHub repo.
 3. Add or attach PostgreSQL.
 4. Set `DATABASE_URL` to the same database used by your ingest script.

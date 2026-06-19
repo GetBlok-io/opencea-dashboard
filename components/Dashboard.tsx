@@ -2,6 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type TemperatureUnit = "C" | "F";
+
+type ModuleListEntry = {
+  alias_key: string;
+  module_id: string;
+  io_key: string | null;
+  io_override: string | null;
+  display_name: string;
+  zone: string | null;
+  aliased_zone: string | null;
+  display_order: number;
+  module_type: string | null;
+};
+
 type ReportedStateRow = {
   id: number;
   source_url: string;
@@ -14,6 +28,8 @@ type ReportedStateRow = {
   state: Record<string, unknown>;
   mode: Record<string, unknown>;
   shadow: Record<string, unknown>;
+  module_name: string | null;
+  module_mappings: ModuleListEntry[];
 };
 
 type ApiResponse = {
@@ -24,8 +40,41 @@ type ApiResponse = {
   error?: string;
 };
 
-function formatValue(value: unknown) {
+type Metric = {
+  key: string;
+  label: string;
+  value: unknown;
+  zone: string | null;
+  order: number;
+  aliasKey?: string;
+};
+
+const TEMP_KEYS = new Set(["temp", "temperature", "water_temperature", "air_temperature"]);
+
+function isTemperatureMetric(key: string, label: string, aliasKey?: string) {
+  const normalizedKey = key.toLowerCase();
+  const normalizedLabel = label.toLowerCase();
+  const normalizedAlias = aliasKey?.toLowerCase() ?? "";
+
+  return (
+    TEMP_KEYS.has(normalizedKey) ||
+    normalizedKey.includes("temp") ||
+    normalizedLabel.includes("temperature") ||
+    normalizedAlias.includes("temperature")
+  );
+}
+
+function celsiusToFahrenheit(celsius: number) {
+  return celsius * (9 / 5) + 32;
+}
+
+function formatValue(value: unknown, metric: Metric, temperatureUnit: TemperatureUnit) {
   if (typeof value === "number") {
+    if (isTemperatureMetric(metric.key, metric.label, metric.aliasKey)) {
+      const converted = temperatureUnit === "F" ? celsiusToFahrenheit(value) : value;
+      return `${converted.toFixed(1)} °${temperatureUnit}`;
+    }
+
     return Number.isInteger(value) ? value.toString() : value.toFixed(2);
   }
 
@@ -49,7 +98,7 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function getPrimaryMetrics(row: ReportedStateRow) {
+function getPrimaryMetrics(row: ReportedStateRow): Metric[] {
   const preferredOrder = [
     "pH",
     "ec",
@@ -70,29 +119,61 @@ function getPrimaryMetrics(row: ReportedStateRow) {
     "output_4",
   ];
 
-  const entries = Object.entries(row.state ?? {});
-  const sorted = entries.sort(([a], [b]) => {
-    const aIndex = preferredOrder.indexOf(a);
-    const bIndex = preferredOrder.indexOf(b);
+  const mappingsByIo = new Map<string, ModuleListEntry[]>();
+  for (const mapping of row.module_mappings ?? []) {
+    if (!mapping.io_key) continue;
+    const list = mappingsByIo.get(mapping.io_key) ?? [];
+    list.push(mapping);
+    mappingsByIo.set(mapping.io_key, list);
+  }
 
-    if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-    if (aIndex === -1) return 1;
-    if (bIndex === -1) return -1;
-    return aIndex - bIndex;
+  const metrics = Object.entries(row.state ?? {}).map(([key, value]) => {
+    const mappings = mappingsByIo.get(key) ?? [];
+    const mapping = mappings.sort((a, b) => {
+      if ((a.zone ?? "") !== (b.zone ?? "")) return (a.zone ?? "").localeCompare(b.zone ?? "");
+      return a.display_order - b.display_order;
+    })[0];
+
+    return {
+      key,
+      label: mapping?.display_name ?? key,
+      value,
+      zone: mapping?.zone ?? null,
+      order: mapping?.display_order ?? 999,
+      aliasKey: mapping?.alias_key,
+    } satisfies Metric;
   });
 
-  return sorted.slice(0, 8);
+  return metrics
+    .sort((a, b) => {
+      if (a.zone && b.zone && a.zone !== b.zone) return a.zone.localeCompare(b.zone);
+      if (a.zone && !b.zone) return -1;
+      if (!a.zone && b.zone) return 1;
+
+      if (a.order !== b.order) return a.order - b.order;
+
+      const aIndex = preferredOrder.indexOf(a.key);
+      const bIndex = preferredOrder.indexOf(b.key);
+
+      if (aIndex === -1 && bIndex === -1) return a.key.localeCompare(b.key);
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    })
+    .slice(0, 10);
 }
 
-function DeviceCard({ row }: { row: ReportedStateRow }) {
+function DeviceCard({ row, temperatureUnit }: { row: ReportedStateRow; temperatureUnit: TemperatureUnit }) {
   const metrics = getPrimaryMetrics(row);
+  const title = row.module_name || row.device_id;
 
   return (
     <article className="device-card">
       <div className="device-card-header">
         <div>
           <p className="device-type">{row.device_type}</p>
-          <h2>{row.device_id}</h2>
+          <h2>{title}</h2>
+          {row.module_name ? <p className="device-id">{row.device_id}</p> : null}
         </div>
         <span className={row.connected ? "status online" : "status offline"}>
           {row.connected ? "Connected" : "Disconnected"}
@@ -102,10 +183,11 @@ function DeviceCard({ row }: { row: ReportedStateRow }) {
       <p className="timestamp">Updated: {formatDate(row.device_last_update_at)}</p>
 
       <div className="metric-grid">
-        {metrics.map(([key, value]) => (
-          <div className="metric" key={key}>
-            <span>{key}</span>
-            <strong>{formatValue(value)}</strong>
+        {metrics.map((metric) => (
+          <div className="metric" key={metric.key}>
+            <span>{metric.label}</span>
+            <strong>{formatValue(metric.value, metric, temperatureUnit)}</strong>
+            {metric.zone ? <small>{metric.zone}</small> : null}
           </div>
         ))}
       </div>
@@ -124,6 +206,7 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
   const [lastRefresh, setLastRefresh] = useState<string>(new Date().toISOString());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>("C");
 
   async function refresh() {
     setLoading(true);
@@ -163,15 +246,33 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
     <main className="page-shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">Reported State Dashboard</p>
+          <p className="eyebrow">Farmhand Dashboard</p>
           <h1>Farm device telemetry</h1>
           <p className="hero-copy">
-            Live view of the latest row per device from the PostgreSQL reported_state table.
+            Live view of the latest row per device from PostgreSQL, enriched with module names from module_list.
           </p>
         </div>
-        <button onClick={refresh} disabled={loading}>
-          {loading ? "Refreshing..." : "Refresh now"}
-        </button>
+        <div className="hero-actions">
+          <div className="toggle-group" aria-label="Temperature unit">
+            <button
+              className={temperatureUnit === "C" ? "toggle active" : "toggle"}
+              onClick={() => setTemperatureUnit("C")}
+              type="button"
+            >
+              °C
+            </button>
+            <button
+              className={temperatureUnit === "F" ? "toggle active" : "toggle"}
+              onClick={() => setTemperatureUnit("F")}
+              type="button"
+            >
+              °F
+            </button>
+          </div>
+          <button onClick={refresh} disabled={loading} type="button">
+            {loading ? "Refreshing..." : "Refresh now"}
+          </button>
+        </div>
       </section>
 
       <section className="summary-grid">
@@ -202,7 +303,7 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
 
       <section className="device-grid">
         {rows.map((row) => (
-          <DeviceCard key={row.device_id} row={row} />
+          <DeviceCard key={row.device_id} row={row} temperatureUnit={temperatureUnit} />
         ))}
       </section>
     </main>
