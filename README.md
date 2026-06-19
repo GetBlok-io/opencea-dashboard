@@ -1,113 +1,68 @@
-# Farmhand Dashboard
+# farmhand-dashboard
 
-A small Next.js dashboard for viewing the latest farm device telemetry from the PostgreSQL `reported_state` table..
+Next.js dashboard for Farmhand reported state telemetry.
 
-## What it does
+The app reads the latest connected module snapshots from PostgreSQL table `reported_state`, enriches each mapped IO value with friendly names from `module_list`, and displays the farm by operational zone:
 
-- Reads the latest row per `device_id` from PostgreSQL.
-- Displays connected/disconnected status.
-- Displays common telemetry values such as pH, EC, temperature, RH, CO2, analog values, pumps, and outputs.
-- Enriches device telemetry with friendly labels from the `module_list` table.
-- Provides a Celsius/Fahrenheit toggle. Source temperature values are assumed to be Celsius.
-- Includes a JSON details view for each device.
-- Auto-refreshes through `/api/reported-state/latest`.
+- Container
+- Nursery
+- Cultivation
 
-## Requirements
+## Current display behavior
 
-- Node.js 20+
-- PostgreSQL database with the `reported_state` table already created
-- PostgreSQL database with the `module_list` table created from `db/module_list_schema.sql`
-- `DATABASE_URL` environment variable
-
-## Local setup
-
-```bash
-npm install
-cp .env.example .env
-npm run dev
-```
-
-Then open:
-
-```txt
-http://localhost:3000
-```
+- Disconnected modules are hidden.
+- Values are grouped by `module_list.zone`.
+- Card titles are zone names instead of raw hardware module types.
+- Module IDs are not displayed in the dashboard UI.
+- Temperatures are assumed to be Celsius at source and can be toggled to Fahrenheit.
+- Output values render as `OFF` for `0` and `ON` for `1`.
+- Nutrient / chemical level input values render as `OK` for `0` and `LOW` for `1`.
 
 ## Environment variables
+
+Create a `.env` file locally:
 
 ```env
 DATABASE_URL=postgresql://user:password@host:5432/database
 NEXT_PUBLIC_REFRESH_SECONDS=30
 ```
 
-Optional if your database requires SSL:
+For Railway, add the same variables in the service Variables tab.
 
-```env
-PGSSLMODE=require
-```
-
-## Create the module_list table
-
-Run this SQL against the same database used by the dashboard:
+## Local development
 
 ```bash
-psql "$DATABASE_URL" -f db/module_list_schema.sql
+npm install
+npm run dev
 ```
 
-Or paste the contents of `db/module_list_schema.sql` into your PostgreSQL query console.
-
-## Import module mappings
-
-Install the importer requirement in your Python virtual environment:
-
-```bash
-pip install -r scripts/requirements.txt
-```
-
-Set your local database URL:
-
-```bash
-export DATABASE_URL="postgresql://user:password@host:5432/database"
-```
-
-On Windows PowerShell:
-
-```powershell
-$env:DATABASE_URL="postgresql://user:password@host:5432/database"
-```
-
-Then import your module mapping file:
-
-```bash
-python scripts/import_module_list.py /path/to/module_list.json
-```
-
-The importer supports both clean JSON and copied page text that contains the current module mapping JSON.
-
-## Railway deployment
-
-1. Push this folder to your GitHub repository named `farmhand-dashboard`.
-2. In Railway, create a new project from the GitHub repo.
-3. Add or attach PostgreSQL.
-4. Set `DATABASE_URL` to the same database used by your ingest script.
-5. Optional: set `NEXT_PUBLIC_REFRESH_SECONDS=30`.
-6. Deploy.
-
-Railway should detect this as a Next.js app and run the standard build/start flow.
-
-## Useful endpoint
+Open:
 
 ```txt
-/api/reported-state/latest
+http://localhost:3000
 ```
 
-Returns JSON:
+## Database requirement
 
-```json
-{
-  "ok": true,
-  "count": 8,
-  "generated_at": "2026-01-01T00:00:00.000Z",
-  "data": []
-}
+This dashboard expects both tables to exist:
+
+```sql
+reported_state
+module_list
+```
+
+The `module_list` table should be populated by the scraper/import process before deploying this dashboard. If the mapping is missing, the dashboard will have no mapped values to show under the three zone groupings.
+
+## Railway
+
+Build command:
+
+```bash
+npm run build
+```
+
+Start command:
+
+```bash
+npm start
 ```

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type TemperatureUnit = "C" | "F";
+type ZoneName = "Container" | "Nursery" | "Cultivation";
 
 type ModuleListEntry = {
   alias_key: string;
@@ -41,15 +42,39 @@ type ApiResponse = {
 };
 
 type Metric = {
+  id: string;
   key: string;
   label: string;
   value: unknown;
-  zone: string | null;
+  zone: ZoneName;
   order: number;
   aliasKey?: string;
+  deviceType: string;
+  updatedAt: string | null;
 };
 
+type ZoneGroup = {
+  zone: ZoneName;
+  metrics: Metric[];
+};
+
+const ZONES: ZoneName[] = ["Container", "Nursery", "Cultivation"];
 const TEMP_KEYS = new Set(["temp", "temperature", "water_temperature", "air_temperature"]);
+const NUTRIENT_LEVEL_ALIAS_KEYS = new Set([
+  "nutrient_a_level",
+  "nutrient_b_level",
+  "ph_down_level",
+  "ph_up_level",
+]);
+
+function normalizeZone(value: string | null | undefined): ZoneName | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "container") return "Container";
+  if (normalized === "nursery") return "Nursery";
+  if (normalized === "cultivation") return "Cultivation";
+  return null;
+}
 
 function isTemperatureMetric(key: string, label: string, aliasKey?: string) {
   const normalizedKey = key.toLowerCase();
@@ -68,8 +93,34 @@ function celsiusToFahrenheit(celsius: number) {
   return celsius * (9 / 5) + 32;
 }
 
+function isOutputMetric(metric: Metric) {
+  return metric.deviceType === "output" || metric.key.toLowerCase().startsWith("output_");
+}
+
+function isNutrientLevelMetric(metric: Metric) {
+  const alias = metric.aliasKey?.toLowerCase() ?? "";
+  const label = metric.label.toLowerCase();
+
+  return (
+    metric.deviceType === "input" &&
+    (NUTRIENT_LEVEL_ALIAS_KEYS.has(alias) ||
+      label.includes("nutrient") ||
+      label.includes("ph down") ||
+      label.includes("ph up") ||
+      label.includes("boost / ph up"))
+  );
+}
+
 function formatValue(value: unknown, metric: Metric, temperatureUnit: TemperatureUnit) {
   if (typeof value === "number") {
+    if (isOutputMetric(metric)) {
+      return value === 1 ? "ON" : "OFF";
+    }
+
+    if (isNutrientLevelMetric(metric)) {
+      return value === 1 ? "LOW" : "OK";
+    }
+
     if (isTemperatureMetric(metric.key, metric.label, metric.aliasKey)) {
       const converted = temperatureUnit === "F" ? celsiusToFahrenheit(value) : value;
       return `${converted.toFixed(1)} °${temperatureUnit}`;
@@ -98,104 +149,88 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function getPrimaryMetrics(row: ReportedStateRow): Metric[] {
-  const preferredOrder = [
-    "pH",
-    "ec",
-    "temp",
-    "RH",
-    "CO2",
-    "analog_1",
-    "analog_2",
-    "analog_3",
-    "analog_4",
-    "pump_1",
-    "pump_2",
-    "pump_3",
-    "pump_4",
-    "output_1",
-    "output_2",
-    "output_3",
-    "output_4",
-  ];
+function buildZoneGroups(rows: ReportedStateRow[]): ZoneGroup[] {
+  const zoneMap = new Map<ZoneName, Metric[]>();
+  for (const zone of ZONES) zoneMap.set(zone, []);
 
-  const mappingsByIo = new Map<string, ModuleListEntry[]>();
-  for (const mapping of row.module_mappings ?? []) {
-    if (!mapping.io_key) continue;
-    const list = mappingsByIo.get(mapping.io_key) ?? [];
-    list.push(mapping);
-    mappingsByIo.set(mapping.io_key, list);
+  const connectedRows = rows.filter((row) => row.connected === true);
+
+  for (const row of connectedRows) {
+    const mappingsByIo = new Map<string, ModuleListEntry[]>();
+
+    for (const mapping of row.module_mappings ?? []) {
+      if (!mapping.io_key) continue;
+      const zone = normalizeZone(mapping.zone);
+      if (!zone) continue;
+
+      const list = mappingsByIo.get(mapping.io_key) ?? [];
+      list.push(mapping);
+      mappingsByIo.set(mapping.io_key, list);
+    }
+
+    for (const [key, value] of Object.entries(row.state ?? {})) {
+      const mappings = mappingsByIo.get(key) ?? [];
+
+      for (const mapping of mappings) {
+        const zone = normalizeZone(mapping.zone);
+        if (!zone) continue;
+
+        zoneMap.get(zone)?.push({
+          id: `${row.device_id}:${key}:${mapping.alias_key}`,
+          key,
+          label: mapping.display_name || key,
+          value,
+          zone,
+          order: mapping.display_order ?? 999,
+          aliasKey: mapping.alias_key,
+          deviceType: row.device_type,
+          updatedAt: row.device_last_update_at,
+        });
+      }
+    }
   }
 
-  const metrics = Object.entries(row.state ?? {}).map(([key, value]) => {
-    const mappings = mappingsByIo.get(key) ?? [];
-    const mapping = mappings.sort((a, b) => {
-      if ((a.zone ?? "") !== (b.zone ?? "")) return (a.zone ?? "").localeCompare(b.zone ?? "");
-      return a.display_order - b.display_order;
-    })[0];
-
-    return {
-      key,
-      label: mapping?.display_name ?? key,
-      value,
-      zone: mapping?.zone ?? null,
-      order: mapping?.display_order ?? 999,
-      aliasKey: mapping?.alias_key,
-    } satisfies Metric;
-  });
-
-  return metrics
-    .sort((a, b) => {
-      if (a.zone && b.zone && a.zone !== b.zone) return a.zone.localeCompare(b.zone);
-      if (a.zone && !b.zone) return -1;
-      if (!a.zone && b.zone) return 1;
-
+  return ZONES.map((zone) => ({
+    zone,
+    metrics: (zoneMap.get(zone) ?? []).sort((a, b) => {
       if (a.order !== b.order) return a.order - b.order;
-
-      const aIndex = preferredOrder.indexOf(a.key);
-      const bIndex = preferredOrder.indexOf(b.key);
-
-      if (aIndex === -1 && bIndex === -1) return a.key.localeCompare(b.key);
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
-    })
-    .slice(0, 10);
+      return a.label.localeCompare(b.label);
+    }),
+  }));
 }
 
-function DeviceCard({ row, temperatureUnit }: { row: ReportedStateRow; temperatureUnit: TemperatureUnit }) {
-  const metrics = getPrimaryMetrics(row);
-  const title = row.module_name || row.device_id;
+function ZoneCard({ group, temperatureUnit }: { group: ZoneGroup; temperatureUnit: TemperatureUnit }) {
+  const latestUpdate = group.metrics
+    .map((metric) => metric.updatedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
 
   return (
-    <article className="device-card">
-      <div className="device-card-header">
+    <article className="zone-card">
+      <div className="zone-card-header">
         <div>
-          <p className="device-type">{row.device_type}</p>
-          <h2>{title}</h2>
-          {row.module_name ? <p className="device-id">{row.device_id}</p> : null}
+          <p className="zone-kicker">Zone</p>
+          <h2>{group.zone}</h2>
         </div>
-        <span className={row.connected ? "status online" : "status offline"}>
-          {row.connected ? "Connected" : "Disconnected"}
-        </span>
+        <span className="metric-count">{group.metrics.length} values</span>
       </div>
 
-      <p className="timestamp">Updated: {formatDate(row.device_last_update_at)}</p>
+      <p className="timestamp">Updated: {formatDate(latestUpdate)}</p>
 
-      <div className="metric-grid">
-        {metrics.map((metric) => (
-          <div className="metric" key={metric.key}>
-            <span>{metric.label}</span>
-            <strong>{formatValue(metric.value, metric, temperatureUnit)}</strong>
-            {metric.zone ? <small>{metric.zone}</small> : null}
-          </div>
-        ))}
-      </div>
-
-      <details>
-        <summary>View raw state</summary>
-        <pre>{JSON.stringify(row.state, null, 2)}</pre>
-      </details>
+      {group.metrics.length > 0 ? (
+        <div className="metric-grid">
+          {group.metrics.map((metric) => (
+            <div className="metric" key={metric.id}>
+              <span>{metric.label}</span>
+              <strong className={isNutrientLevelMetric(metric) && metric.value === 1 ? "alert-value" : undefined}>
+                {formatValue(metric.value, metric, temperatureUnit)}
+              </strong>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-zone">No connected mapped values found for this zone.</div>
+      )}
     </article>
   );
 }
@@ -234,22 +269,25 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
     return () => window.clearInterval(interval);
   }, [refreshSeconds]);
 
-  const summary = useMemo(() => {
-    const online = rows.filter((row) => row.connected).length;
-    const offline = rows.length - online;
-    const types = new Set(rows.map((row) => row.device_type)).size;
+  const connectedRows = useMemo(() => rows.filter((row) => row.connected === true), [rows]);
+  const zoneGroups = useMemo(() => buildZoneGroups(connectedRows), [connectedRows]);
 
-    return { online, offline, types };
-  }, [rows]);
+  const summary = useMemo(() => {
+    const mappedValues = zoneGroups.reduce((total, group) => total + group.metrics.length, 0);
+    const activeZones = zoneGroups.filter((group) => group.metrics.length > 0).length;
+    const types = new Set(connectedRows.map((row) => row.device_type)).size;
+
+    return { connectedDevices: connectedRows.length, mappedValues, activeZones, types };
+  }, [connectedRows, zoneGroups]);
 
   return (
     <main className="page-shell">
       <section className="hero">
         <div>
           <p className="eyebrow">Farmhand Dashboard</p>
-          <h1>Farm device telemetry</h1>
+          <h1>Farm zone telemetry</h1>
           <p className="hero-copy">
-            Live view of the latest row per device from PostgreSQL, enriched with module names from module_list.
+            Live view of connected Farmhand modules, grouped by Container, Nursery, and Cultivation using the module_list mapping.
           </p>
         </div>
         <div className="hero-actions">
@@ -277,19 +315,19 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
 
       <section className="summary-grid">
         <div className="summary-card">
-          <span>Total devices</span>
-          <strong>{rows.length}</strong>
+          <span>Connected modules</span>
+          <strong>{summary.connectedDevices}</strong>
         </div>
         <div className="summary-card">
-          <span>Connected</span>
-          <strong>{summary.online}</strong>
+          <span>Mapped values</span>
+          <strong>{summary.mappedValues}</strong>
         </div>
         <div className="summary-card">
-          <span>Disconnected</span>
-          <strong>{summary.offline}</strong>
+          <span>Active zones</span>
+          <strong>{summary.activeZones}</strong>
         </div>
         <div className="summary-card">
-          <span>Device types</span>
+          <span>Module types</span>
           <strong>{summary.types}</strong>
         </div>
       </section>
@@ -301,9 +339,9 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
 
       {error ? <div className="error-box">{error}</div> : null}
 
-      <section className="device-grid">
-        {rows.map((row) => (
-          <DeviceCard key={row.device_id} row={row} temperatureUnit={temperatureUnit} />
+      <section className="zone-grid">
+        {zoneGroups.map((group) => (
+          <ZoneCard key={group.zone} group={group} temperatureUnit={temperatureUnit} />
         ))}
       </section>
     </main>

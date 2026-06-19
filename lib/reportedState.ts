@@ -44,6 +44,7 @@ export async function getLatestReportedState(): Promise<ReportedStateRow[]> {
         mode,
         shadow
       FROM reported_state
+      WHERE connected IS TRUE
       ORDER BY device_id, device_last_update_at DESC NULLS LAST, scraped_at DESC
     )
     SELECT
@@ -72,7 +73,15 @@ export async function getLatestReportedState(): Promise<ReportedStateRow[]> {
             'display_order', ml.display_order,
             'module_type', ml.module_type
           )
-          ORDER BY ml.zone NULLS LAST, ml.display_order ASC, ml.display_name ASC
+          ORDER BY
+            CASE COALESCE(ml.zone, '')
+              WHEN 'Container' THEN 1
+              WHEN 'Nursery' THEN 2
+              WHEN 'Cultivation' THEN 3
+              ELSE 9
+            END,
+            ml.display_order ASC,
+            ml.display_name ASC
         ) FILTER (WHERE ml.id IS NOT NULL AND ml.io_key IS NOT NULL),
         '[]'::jsonb
       ) AS module_mappings
