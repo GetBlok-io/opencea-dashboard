@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type TemperatureUnit = "C" | "F";
 type ZoneName = "Container" | "Nursery" | "Cultivation";
+type MetricRow = "primary" | "secondary" | "other";
 
 type ModuleListEntry = {
   alias_key: string;
@@ -62,25 +63,32 @@ type ZoneGroup = {
 const ZONES: ZoneName[] = ["Container", "Nursery", "Cultivation"];
 const TEMP_KEYS = new Set(["temp", "temperature", "water_temperature", "air_temperature"]);
 
+const CONTAINER_PRIMARY_ALIASES = new Set(["air_temperature", "relative_humidity", "co2"]);
+const CONTAINER_NUTRIENT_LEVEL_ALIASES = new Set([
+  "nutrient_a_level",
+  "nutrient_b_level",
+  "ph_up_level",
+  "ph_down_level",
+]);
+const WATER_PRIMARY_ALIASES = new Set([
+  "nursery_ec",
+  "nursery_ph",
+  "nursery_water_temperature",
+  "cultivation_ec",
+  "cultivation_ph",
+  "cultivation_water_temperature",
+]);
+const WATER_SECONDARY_ALIASES = new Set([
+  "nursery_tank_depth",
+  "cultivation_tank_depth",
+  "top_trough_level",
+  "bottom_trough_level",
+]);
 const TROUGH_LEVEL_ALIASES = new Set(["top_trough_level", "bottom_trough_level"]);
 const TANK_DEPTH_ALIASES = new Set(["nursery_tank_depth", "cultivation_tank_depth"]);
 const SEND_PRESSURE_ALIASES = new Set([
   "cultivation_left_send_pressure",
   "cultivation_right_send_pressure",
-]);
-const LEVEL_STATUS_ALIASES = new Set([
-  "nutrient_a_level",
-  "nutrient_b_level",
-  "ph_down_level",
-  "ph_up_level",
-  "nursery_nutrient_a",
-  "nursery_nutrient_b",
-  "nursery_ph_down",
-  "nursery_ph_up",
-  "cultivation_nutrient_a",
-  "cultivation_nutrient_b",
-  "cultivation_ph_down",
-  "cultivation_ph_up",
 ]);
 
 function normalizeZone(value: string | null | undefined): ZoneName | null {
@@ -117,6 +125,14 @@ function isOutputMetric(metric: Metric) {
   return metric.deviceType === "output" || metric.key.toLowerCase().startsWith("output_");
 }
 
+function isPumpMetric(metric: Metric) {
+  const key = normalizeText(metric.key);
+  const alias = normalizeText(metric.aliasKey);
+  const label = normalizeText(metric.label);
+
+  return key.startsWith("pump_") || alias.includes("pump") || label.includes("pump");
+}
+
 function isTroughLevelMetric(metric: Metric) {
   const alias = normalizeText(metric.aliasKey);
   const label = normalizeText(metric.label);
@@ -135,22 +151,22 @@ function isSendPressureMetric(metric: Metric) {
   return SEND_PRESSURE_ALIASES.has(alias) || label.includes("send pressure");
 }
 
-function isLevelStatusMetric(metric: Metric) {
+function isContainerNutrientLevelMetric(metric: Metric) {
   const alias = normalizeText(metric.aliasKey);
   const label = normalizeText(metric.label);
 
   return (
-    LEVEL_STATUS_ALIASES.has(alias) ||
-    label === "nutrient a" ||
-    label === "nutrient b" ||
-    label === "nutrient c" ||
-    label === "ph down" ||
-    label.includes("nutrient a level") ||
-    label.includes("nutrient b level") ||
-    label.includes("nutrient c level") ||
-    label.includes("boost") ||
-    label.includes("ph up level") ||
-    label.includes("ph down level")
+    metric.zone === "Container" &&
+    !isPumpMetric(metric) &&
+    (
+      CONTAINER_NUTRIENT_LEVEL_ALIASES.has(alias) ||
+      label.includes("nutrient a level") ||
+      label.includes("nutrient b level") ||
+      label.includes("nutrient c level") ||
+      label.includes("boost") ||
+      label.includes("ph up level") ||
+      label.includes("ph down level")
+    )
   );
 }
 
@@ -165,11 +181,11 @@ function formatValue(value: unknown, metric: Metric, temperatureUnit: Temperatur
       return value === 1 ? "EMPTY" : "FULL";
     }
 
-    if (isLevelStatusMetric(metric)) {
+    if (isContainerNutrientLevelMetric(metric)) {
       return value === 1 ? "LOW" : "OK";
     }
 
-    if (isOutputMetric(metric)) {
+    if (isPumpMetric(metric) || isOutputMetric(metric)) {
       return value === 1 ? "ON" : "OFF";
     }
 
@@ -199,9 +215,9 @@ function formatValue(value: unknown, metric: Metric, temperatureUnit: Temperatur
 function valueClass(metric: Metric) {
   if (typeof metric.value !== "number") return undefined;
 
-  if (isLevelStatusMetric(metric) && metric.value === 1) return "alert-value";
+  if (isContainerNutrientLevelMetric(metric) && metric.value === 1) return "alert-value";
   if (isTroughLevelMetric(metric) && metric.value === 1) return "alert-value";
-  if (isOutputMetric(metric) && metric.value === 1) return "active-value";
+  if ((isPumpMetric(metric) || isOutputMetric(metric)) && metric.value === 1) return "active-value";
 
   return undefined;
 }
@@ -213,6 +229,43 @@ function formatDate(value: string | null) {
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(new Date(value));
+}
+
+function getMetricRow(metric: Metric): MetricRow {
+  const alias = normalizeText(metric.aliasKey);
+
+  if (metric.zone === "Container") {
+    if (CONTAINER_PRIMARY_ALIASES.has(alias)) return "primary";
+    if (isContainerNutrientLevelMetric(metric)) return "secondary";
+    return "other";
+  }
+
+  if (metric.zone === "Nursery" || metric.zone === "Cultivation") {
+    if (WATER_PRIMARY_ALIASES.has(alias)) return "primary";
+    if (WATER_SECONDARY_ALIASES.has(alias)) return "secondary";
+    return "other";
+  }
+
+  return "other";
+}
+
+function rowTitle(zone: ZoneName, row: MetricRow) {
+  if (zone === "Container") {
+    if (row === "primary") return "Farm-wide climate";
+    if (row === "secondary") return "Nutrient tank levels";
+    return "Other container controls";
+  }
+
+  if (row === "primary") return "Water chemistry";
+  if (row === "secondary") return "Water levels";
+  return "Pumps, lights, and controls";
+}
+
+function sortMetrics(a: Metric, b: Metric) {
+  if (a.order !== b.order) return a.order - b.order;
+  if (a.label !== b.label) return a.label.localeCompare(b.label);
+  if (a.deviceId !== b.deviceId) return a.deviceId.localeCompare(b.deviceId);
+  return a.key.localeCompare(b.key);
 }
 
 function buildZoneGroups(rows: ReportedStateRow[]): ZoneGroup[] {
@@ -259,12 +312,63 @@ function buildZoneGroups(rows: ReportedStateRow[]): ZoneGroup[] {
 
   return ZONES.map((zone) => ({
     zone,
-    metrics: (zoneMap.get(zone) ?? []).sort((a, b) => {
-      if (a.order !== b.order) return a.order - b.order;
-      if (a.label !== b.label) return a.label.localeCompare(b.label);
-      return a.deviceId.localeCompare(b.deviceId);
-    }),
+    metrics: (zoneMap.get(zone) ?? []).sort(sortMetrics),
   }));
+}
+
+function MetricCard({ metric, temperatureUnit }: { metric: Metric; temperatureUnit: TemperatureUnit }) {
+  return (
+    <div className="metric" key={metric.id}>
+      <span>{metric.label}</span>
+      <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
+      <small className="module-id">{metric.deviceId} · {metric.key}</small>
+    </div>
+  );
+}
+
+function ZoneMetricRow({
+  zone,
+  row,
+  metrics,
+  temperatureUnit,
+}: {
+  zone: ZoneName;
+  row: MetricRow;
+  metrics: Metric[];
+  temperatureUnit: TemperatureUnit;
+}) {
+  if (metrics.length === 0) return null;
+
+  const isNutrientLevelRow = zone === "Container" && row === "secondary";
+
+  return (
+    <section className="zone-row">
+      <h3>{rowTitle(zone, row)}</h3>
+      {isNutrientLevelRow ? (
+        <div className="metric metric-wide">
+          <div className="metric-wide-header">
+            <span>Nutrient and pH supply tanks</span>
+            <small>Container inventory status</small>
+          </div>
+          <div className="nested-metric-grid">
+            {metrics.map((metric) => (
+              <div className="nested-metric" key={metric.id}>
+                <span>{metric.label}</span>
+                <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
+                <small className="module-id">{metric.deviceId} · {metric.key}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="metric-grid">
+          {metrics.map((metric) => (
+            <MetricCard key={metric.id} metric={metric} temperatureUnit={temperatureUnit} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function ZoneCard({ group, temperatureUnit }: { group: ZoneGroup; temperatureUnit: TemperatureUnit }) {
@@ -272,6 +376,10 @@ function ZoneCard({ group, temperatureUnit }: { group: ZoneGroup; temperatureUni
     .map((metric) => metric.updatedAt)
     .filter((value): value is string => Boolean(value))
     .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
+
+  const primary = group.metrics.filter((metric) => getMetricRow(metric) === "primary").sort(sortMetrics);
+  const secondary = group.metrics.filter((metric) => getMetricRow(metric) === "secondary").sort(sortMetrics);
+  const other = group.metrics.filter((metric) => getMetricRow(metric) === "other").sort(sortMetrics);
 
   return (
     <article className="zone-card">
@@ -286,14 +394,10 @@ function ZoneCard({ group, temperatureUnit }: { group: ZoneGroup; temperatureUni
       <p className="timestamp">Updated: {formatDate(latestUpdate)}</p>
 
       {group.metrics.length > 0 ? (
-        <div className="metric-grid">
-          {group.metrics.map((metric) => (
-            <div className="metric" key={metric.id}>
-              <span>{metric.label}</span>
-              <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
-              <small className="module-id">{metric.deviceId} · {metric.key}</small>
-            </div>
-          ))}
+        <div className="zone-row-stack">
+          <ZoneMetricRow zone={group.zone} row="primary" metrics={primary} temperatureUnit={temperatureUnit} />
+          <ZoneMetricRow zone={group.zone} row="secondary" metrics={secondary} temperatureUnit={temperatureUnit} />
+          <ZoneMetricRow zone={group.zone} row="other" metrics={other} temperatureUnit={temperatureUnit} />
         </div>
       ) : (
         <div className="empty-zone">No connected mapped values found for this zone.</div>

@@ -267,3 +267,91 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+
+.zone-row-stack {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.zone-row {
+  display: grid;
+  gap: 10px;
+}
+
+.zone-row h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metric-wide {
+  min-height: unset;
+}
+
+.metric-wide-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.metric-wide-header span {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.metric-wide-header small {
+  color: var(--muted);
+}
+
+.nested-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.nested-metric {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.nested-metric span {
+  color: var(--muted);
+}
+
+.nested-metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.2rem;
+}
+
+.nested-metric strong.alert-value {
+  color: var(--warning);
+}
+
+.nested-metric strong.active-value {
+  color: var(--good);
+}
+
+@media (max-width: 900px) {
+  .nested-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .nested-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-wide-header {
+    display: block;
+  }
+}
