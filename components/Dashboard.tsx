@@ -49,6 +49,7 @@ type Metric = {
   zone: ZoneName;
   order: number;
   aliasKey?: string;
+  deviceId: string;
   deviceType: string;
   updatedAt: string | null;
 };
@@ -60,11 +61,26 @@ type ZoneGroup = {
 
 const ZONES: ZoneName[] = ["Container", "Nursery", "Cultivation"];
 const TEMP_KEYS = new Set(["temp", "temperature", "water_temperature", "air_temperature"]);
-const NUTRIENT_LEVEL_ALIAS_KEYS = new Set([
+
+const TROUGH_LEVEL_ALIASES = new Set(["top_trough_level", "bottom_trough_level"]);
+const TANK_DEPTH_ALIASES = new Set(["nursery_tank_depth", "cultivation_tank_depth"]);
+const SEND_PRESSURE_ALIASES = new Set([
+  "cultivation_left_send_pressure",
+  "cultivation_right_send_pressure",
+]);
+const LEVEL_STATUS_ALIASES = new Set([
   "nutrient_a_level",
   "nutrient_b_level",
   "ph_down_level",
   "ph_up_level",
+  "nursery_nutrient_a",
+  "nursery_nutrient_b",
+  "nursery_ph_down",
+  "nursery_ph_up",
+  "cultivation_nutrient_a",
+  "cultivation_nutrient_b",
+  "cultivation_ph_down",
+  "cultivation_ph_up",
 ]);
 
 function normalizeZone(value: string | null | undefined): ZoneName | null {
@@ -76,10 +92,14 @@ function normalizeZone(value: string | null | undefined): ZoneName | null {
   return null;
 }
 
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
 function isTemperatureMetric(key: string, label: string, aliasKey?: string) {
-  const normalizedKey = key.toLowerCase();
-  const normalizedLabel = label.toLowerCase();
-  const normalizedAlias = aliasKey?.toLowerCase() ?? "";
+  const normalizedKey = normalizeText(key);
+  const normalizedLabel = normalizeText(label);
+  const normalizedAlias = normalizeText(aliasKey);
 
   return (
     TEMP_KEYS.has(normalizedKey) ||
@@ -97,28 +117,64 @@ function isOutputMetric(metric: Metric) {
   return metric.deviceType === "output" || metric.key.toLowerCase().startsWith("output_");
 }
 
-function isNutrientLevelMetric(metric: Metric) {
-  const alias = metric.aliasKey?.toLowerCase() ?? "";
-  const label = metric.label.toLowerCase();
+function isTroughLevelMetric(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  const label = normalizeText(metric.label);
+  return TROUGH_LEVEL_ALIASES.has(alias) || label.includes("trough level");
+}
+
+function isTankDepthMetric(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  const label = normalizeText(metric.label);
+  return TANK_DEPTH_ALIASES.has(alias) || label.includes("tank depth");
+}
+
+function isSendPressureMetric(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  const label = normalizeText(metric.label);
+  return SEND_PRESSURE_ALIASES.has(alias) || label.includes("send pressure");
+}
+
+function isLevelStatusMetric(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  const label = normalizeText(metric.label);
 
   return (
-    metric.deviceType === "input" &&
-    (NUTRIENT_LEVEL_ALIAS_KEYS.has(alias) ||
-      label.includes("nutrient") ||
-      label.includes("ph down") ||
-      label.includes("ph up") ||
-      label.includes("boost / ph up"))
+    LEVEL_STATUS_ALIASES.has(alias) ||
+    label === "nutrient a" ||
+    label === "nutrient b" ||
+    label === "nutrient c" ||
+    label === "ph down" ||
+    label.includes("nutrient a level") ||
+    label.includes("nutrient b level") ||
+    label.includes("nutrient c level") ||
+    label.includes("boost") ||
+    label.includes("ph up level") ||
+    label.includes("ph down level")
   );
+}
+
+function formatPercent(value: number) {
+  const rounded = Number.isInteger(value) ? value.toString() : value.toFixed(1).replace(/\.0$/, "");
+  return `${rounded}%`;
 }
 
 function formatValue(value: unknown, metric: Metric, temperatureUnit: TemperatureUnit) {
   if (typeof value === "number") {
+    if (isTroughLevelMetric(metric)) {
+      return value === 1 ? "EMPTY" : "FULL";
+    }
+
+    if (isLevelStatusMetric(metric)) {
+      return value === 1 ? "LOW" : "OK";
+    }
+
     if (isOutputMetric(metric)) {
       return value === 1 ? "ON" : "OFF";
     }
 
-    if (isNutrientLevelMetric(metric)) {
-      return value === 1 ? "LOW" : "OK";
+    if (isTankDepthMetric(metric) || isSendPressureMetric(metric)) {
+      return formatPercent(value);
     }
 
     if (isTemperatureMetric(metric.key, metric.label, metric.aliasKey)) {
@@ -138,6 +194,16 @@ function formatValue(value: unknown, metric: Metric, temperatureUnit: Temperatur
   }
 
   return String(value);
+}
+
+function valueClass(metric: Metric) {
+  if (typeof metric.value !== "number") return undefined;
+
+  if (isLevelStatusMetric(metric) && metric.value === 1) return "alert-value";
+  if (isTroughLevelMetric(metric) && metric.value === 1) return "alert-value";
+  if (isOutputMetric(metric) && metric.value === 1) return "active-value";
+
+  return undefined;
 }
 
 function formatDate(value: string | null) {
@@ -183,6 +249,7 @@ function buildZoneGroups(rows: ReportedStateRow[]): ZoneGroup[] {
           zone,
           order: mapping.display_order ?? 999,
           aliasKey: mapping.alias_key,
+          deviceId: row.device_id,
           deviceType: row.device_type,
           updatedAt: row.device_last_update_at,
         });
@@ -194,7 +261,8 @@ function buildZoneGroups(rows: ReportedStateRow[]): ZoneGroup[] {
     zone,
     metrics: (zoneMap.get(zone) ?? []).sort((a, b) => {
       if (a.order !== b.order) return a.order - b.order;
-      return a.label.localeCompare(b.label);
+      if (a.label !== b.label) return a.label.localeCompare(b.label);
+      return a.deviceId.localeCompare(b.deviceId);
     }),
   }));
 }
@@ -222,9 +290,8 @@ function ZoneCard({ group, temperatureUnit }: { group: ZoneGroup; temperatureUni
           {group.metrics.map((metric) => (
             <div className="metric" key={metric.id}>
               <span>{metric.label}</span>
-              <strong className={isNutrientLevelMetric(metric) && metric.value === 1 ? "alert-value" : undefined}>
-                {formatValue(metric.value, metric, temperatureUnit)}
-              </strong>
+              <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
+              <small className="module-id">{metric.deviceId} · {metric.key}</small>
             </div>
           ))}
         </div>

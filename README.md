@@ -13,10 +13,12 @@ The app reads the latest connected module snapshots from PostgreSQL table `repor
 - Disconnected modules are hidden.
 - Values are grouped by `module_list.zone`.
 - Card titles are zone names instead of raw hardware module types.
-- Module IDs are not displayed in the dashboard UI.
+- Module IDs and IO keys are temporarily displayed under each metric for troubleshooting mapping issues.
 - Temperatures are assumed to be Celsius at source and can be toggled to Fahrenheit.
 - Output values render as `OFF` for `0` and `ON` for `1`.
-- Nutrient / chemical level input values render as `OK` for `0` and `LOW` for `1`.
+- Trough level values render as `FULL` for `0` and `EMPTY` for `1`.
+- Nutrient A, Nutrient B, Nutrient C / Boost, pH up, and pH down level/status values render as `OK` for `0` and `LOW` for `1`.
+- Tank depth and left/right send pressure values render as percentages.
 
 ## Environment variables
 

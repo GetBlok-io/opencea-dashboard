@@ -208,6 +208,19 @@ h2 {
   color: var(--warning);
 }
 
+.metric strong.active-value {
+  color: var(--good);
+}
+
+.module-id {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  word-break: break-all;
+}
+
 .empty-zone {
   margin-top: 16px;
   border: 1px dashed var(--border);
