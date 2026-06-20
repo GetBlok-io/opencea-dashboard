@@ -11,7 +11,9 @@ export type HistoryMetricAlias =
   | "cultivation_ph"
   | "cultivation_ec"
   | "cultivation_water_temperature"
-  | "cultivation_tank_depth";
+  | "cultivation_tank_depth"
+  | "cultivation_left_send_pressure"
+  | "cultivation_right_send_pressure";
 
 export type ReportedStateHistoryPoint = {
   alias_key: HistoryMetricAlias;
@@ -36,6 +38,8 @@ const DEFAULT_ALIASES: HistoryMetricAlias[] = [
   "cultivation_ec",
   "cultivation_water_temperature",
   "cultivation_tank_depth",
+  "cultivation_left_send_pressure",
+  "cultivation_right_send_pressure",
 ];
 
 export async function getReportedStateHistory(hours = 24): Promise<ReportedStateHistoryPoint[]> {
