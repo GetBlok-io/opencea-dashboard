@@ -159,17 +159,17 @@ function TargetGrid({ cards }: { cards: TargetCard[] }) {
 
 function ClimateMatrix({ cards }: { cards: TargetCard[] }) {
   return (
-    <div className="recipe-climate-matrix">
-      <div className="climate-matrix-header">
-        <span>Target</span>
-        <strong>Day</strong>
-        <strong>Night</strong>
+    <div className="recipe-climate-matrix" role="table" aria-label="Container day and night climate targets">
+      <div className="climate-matrix-header" role="row">
+        <span role="columnheader">Metric</span>
+        <strong role="columnheader">Day Time</strong>
+        <strong role="columnheader">Night Time</strong>
       </div>
       {cards.map((card) => (
-        <div className="climate-matrix-row" key={card.label}>
-          <span>{card.label}</span>
-          <strong>{card.day}</strong>
-          <strong>{card.night}</strong>
+        <div className="climate-matrix-row" role="row" key={card.label}>
+          <span role="rowheader">{card.label}</span>
+          <strong role="cell">{card.day}</strong>
+          <strong role="cell">{card.night}</strong>
         </div>
       ))}
     </div>
