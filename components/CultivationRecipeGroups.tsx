@@ -253,47 +253,68 @@ function CultivationLayoutMap({
   );
 }
 
-function CultivationSideGroup({
-  side,
-  timing,
-  lighting,
-  common,
-  dayStart,
-}: {
-  side: CultivationSide;
-  timing: TimingCard[];
-  lighting: LightPair;
-  common: TimingCard[];
-  dayStart: number | null;
-}) {
-  const cards = sideCards(side, timing);
-  const title = sideTitle(side);
+function CultivationLightingSection({ lighting, dayStart }: { lighting: CultivationLighting; dayStart: number | null }) {
+  return (
+    <div className="recipe-zone-subsection">
+      <h3 className="recipe-subtitle">Lighting schedule</h3>
+      <div className="recipe-trough-stack cultivation-side-stack">
+        <CultivationLightCard
+          title={sideTitle("left")}
+          dayStart={dayStart}
+          red={{ color: "Red", ...lighting.left.red }}
+          blue={{ color: "Blue", ...lighting.left.blue }}
+        />
+        <CultivationLightCard
+          title={sideTitle("right")}
+          dayStart={dayStart}
+          red={{ color: "Red", ...lighting.right.red }}
+          blue={{ color: "Blue", ...lighting.right.blue }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CultivationIrrigationSection({ timing }: { timing: TimingCard[] }) {
+  const left = sideCards("left", timing);
+  const right = sideCards("right", timing);
+  const waterCycle = findCard(timing, "Water cycle");
+  const waterOffset = findCard(timing, "Water offset");
+  const recirculation = findCard(timing, "Recirculation");
 
   return (
-    <section className="recipe-trough-group cultivation-side-group">
-      <div className="recipe-trough-header">
-        <p className="zone-kicker">{sideCode(side)}</p>
-        <h3>{title}</h3>
+    <div className="recipe-zone-subsection">
+      <h3 className="recipe-subtitle">Irrigation schedule</h3>
+      <div className="recipe-trough-grid cultivation-schedule-grid">
+        <CultivationMetricCard card={left.waterLength} />
+        <CultivationMetricCard card={left.waterEnable} status />
+        <CultivationMetricCard card={left.water24h} status />
+        <CultivationMetricCard card={right.waterLength} />
+        <CultivationMetricCard card={right.waterEnable} status />
+        <CultivationMetricCard card={right.water24h} status />
+        <CultivationMetricCard card={waterCycle} />
+        <CultivationMetricCard card={waterOffset} />
+        <CultivationMetricCard card={recirculation} status />
       </div>
+    </div>
+  );
+}
 
-      <div className="recipe-trough-grid">
-        <CultivationMetricCard card={common[0]} />
-        <CultivationMetricCard card={cards.waterLength} />
-        <CultivationMetricCard card={cards.waterEnable} status />
-        <CultivationMetricCard card={cards.water24h} status />
-        <CultivationMetricCard card={common[1]} />
-        <CultivationMetricCard card={common[2]} status />
-        <CultivationMetricCard card={common[3]} status />
-        <CultivationMetricCard card={common[4]} status />
+function CultivationDosingSection({ timing, dosing }: { timing: TimingCard[]; dosing: TimingCard[] }) {
+  const ecAutodose = findCard(timing, "EC autodose");
+  const phAutodose = findCard(timing, "pH autodose");
+
+  return (
+    <div className="recipe-zone-subsection">
+      <h3 className="recipe-subtitle">Dosing schedule</h3>
+      <div className="recipe-trough-grid cultivation-dosing-grid">
+        <CultivationMetricCard card={ecAutodose} status />
+        <CultivationMetricCard card={phAutodose} status />
+        {dosing.map((card) => (
+          <CultivationMetricCard key={card.label} card={card} />
+        ))}
       </div>
-
-      <CultivationLightCard
-        title={title}
-        dayStart={dayStart}
-        red={{ color: "Red", ...lighting.red }}
-        blue={{ color: "Blue", ...lighting.blue }}
-      />
-    </section>
+    </div>
   );
 }
 
@@ -310,14 +331,6 @@ export default function CultivationRecipeGroups({
   lighting: CultivationLighting;
   dayStart: number | null;
 }) {
-  const common = [
-    findCard(timing, "Water cycle"),
-    findCard(timing, "Water offset"),
-    findCard(timing, "Recirculation"),
-    findCard(timing, "EC autodose"),
-    findCard(timing, "pH autodose"),
-  ];
-
   return (
     <section className="recipe-panel recipe-zone-panel recipe-cultivation-panel">
       <div className="recipe-section-header">
@@ -328,16 +341,9 @@ export default function CultivationRecipeGroups({
 
       <ClimateMatrix cards={targets} />
       <CultivationLayoutMap timing={timing} lighting={lighting} />
-
-      <div className="recipe-trough-stack cultivation-side-stack">
-        <CultivationSideGroup side="left" timing={timing} lighting={lighting.left} common={common} dayStart={dayStart} />
-        <CultivationSideGroup side="right" timing={timing} lighting={lighting.right} common={common} dayStart={dayStart} />
-      </div>
-
-      <div className="recipe-zone-subsection">
-        <h3 className="recipe-subtitle">Dosing summary</h3>
-        <TimingGrid cards={dosing} />
-      </div>
+      <CultivationLightingSection lighting={lighting} dayStart={dayStart} />
+      <CultivationIrrigationSection timing={timing} />
+      <CultivationDosingSection timing={timing} dosing={dosing} />
     </section>
   );
 }
