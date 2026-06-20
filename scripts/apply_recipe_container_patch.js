@@ -39,75 +39,122 @@ ${marker}
   margin-bottom: 0;
 }
 
-.recipe-target-grid-compact {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.recipe-container-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.45fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.recipe-climate-matrix {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.climate-matrix-header,
+.climate-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr);
   gap: 10px;
+  align-items: center;
+  padding: 11px 14px;
 }
 
-.recipe-target-card-compact {
-  padding: 12px;
-  min-height: auto;
+.climate-matrix-header {
+  background: rgba(56, 189, 248, 0.08);
+  border-bottom: 1px solid var(--border);
 }
 
-.recipe-target-card-compact > span {
-  color: var(--text);
-  font-size: 0.92rem;
+.climate-matrix-header span,
+.climate-matrix-header strong,
+.climate-matrix-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
   font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.recipe-target-card-compact .target-pair {
-  gap: 8px;
-  margin-top: 8px;
+.climate-matrix-row + .climate-matrix-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.recipe-target-card-compact .target-pair div {
-  padding: 8px;
-}
-
-.recipe-target-card-compact .target-pair strong {
-  font-size: 0.98rem;
-  white-space: nowrap;
-}
-
-.recipe-schedule-inline {
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
+.climate-matrix-row strong {
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1.2;
 }
 
 .recipe-timing-grid-compact {
-  grid-template-columns: repeat(2, minmax(0, 220px));
+  grid-template-columns: 1fr;
   gap: 10px;
+  height: 100%;
 }
 
 .recipe-timing-card-compact {
-  padding: 10px 12px;
+  display: grid;
+  align-content: center;
+  padding: 12px 14px;
   min-height: auto;
 }
 
 .recipe-timing-card-compact strong {
-  font-size: 1rem;
+  font-size: 1.08rem;
 }
 
-@media (max-width: 900px) {
-  .recipe-target-grid-compact {
+.recipe-timing-card-compact small {
+  margin-top: 3px;
+}
+
+@media (max-width: 1000px) {
+  .recipe-container-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .recipe-timing-grid-compact {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .recipe-target-grid-compact,
-  .recipe-timing-grid-compact {
-    grid-template-columns: 1fr;
+  .climate-matrix-header,
+  .climate-matrix-row {
+    grid-template-columns: minmax(94px, 0.9fr) repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
   }
 
-  .recipe-target-card-compact .target-pair {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .climate-matrix-row strong {
+    font-size: 0.94rem;
+  }
+
+  .recipe-timing-grid-compact {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 420px) {
-  .recipe-target-card-compact .target-pair {
+  .climate-matrix-header,
+  .climate-matrix-row {
     grid-template-columns: 1fr;
+  }
+
+  .climate-matrix-header strong {
+    display: none;
+  }
+
+  .climate-matrix-row strong:nth-child(2)::before {
+    content: "Day: ";
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+
+  .climate-matrix-row strong:nth-child(3)::before {
+    content: "Night: ";
+    color: var(--muted);
+    font-size: 0.78rem;
   }
 }
 `;
