@@ -18,36 +18,20 @@ type LightTiming = {
   ppfd: number;
 };
 
-const RED_PPFD = 270;
-const BLUE_PPFD = 70;
+type LightChannel = Omit<LightTiming, "color">;
+
+type LightPair = {
+  red: LightChannel;
+  blue: LightChannel;
+};
+
+type NurseryLighting = {
+  top: LightPair;
+  bottom: LightPair;
+};
 
 function findCard(cards: TimingCard[], label: string): TimingCard {
   return cards.find((card) => card.label === label) ?? { label, value: "—" };
-}
-
-function parseOffsetSeconds(value: string): number | null {
-  const parts = value.split("→").map((part) => part.trim());
-  return null;
-}
-
-function parseTimingCard(card: TimingCard): { onDelay: number | null; offDelay: number | null } {
-  const [onRaw, offRaw] = card.value.split("→").map((part) => part.trim());
-  return {
-    onDelay: durationTextToSeconds(onRaw),
-    offDelay: durationTextToSeconds(offRaw),
-  };
-}
-
-function durationTextToSeconds(value: string | undefined): number | null {
-  if (!value || value === "—") return null;
-  let total = 0;
-  const hourMatch = value.match(/(\d+)\s*hr/);
-  const minuteMatch = value.match(/(\d+)\s*min/);
-  const secondMatch = value.match(/(\d+)\s*sec/);
-  if (hourMatch) total += Number(hourMatch[1]) * 3600;
-  if (minuteMatch) total += Number(minuteMatch[1]) * 60;
-  if (secondMatch) total += Number(secondMatch[1]);
-  return Number.isFinite(total) ? total : null;
 }
 
 function formatClock(dayStart: number | null, delay: number | null) {
@@ -191,20 +175,17 @@ function NurseryTroughGroup({
   title,
   waterLength,
   waterEnable,
-  lights,
+  lightPair,
   common,
   dayStart,
 }: {
   title: string;
   waterLength: TimingCard;
   waterEnable: TimingCard;
-  lights: TimingCard[];
+  lightPair: LightPair;
   common: TimingCard[];
   dayStart: number | null;
 }) {
-  const redTiming = parseTimingCard(lights[0]);
-  const blueTiming = parseTimingCard(lights[1]);
-
   return (
     <section className="recipe-trough-group">
       <div className="recipe-trough-header">
@@ -224,8 +205,8 @@ function NurseryTroughGroup({
       <NurseryLightCard
         title={title.replace(" Trough", "")}
         dayStart={dayStart}
-        red={{ color: "Red", ppfd: RED_PPFD, ...redTiming }}
-        blue={{ color: "Blue", ppfd: BLUE_PPFD, ...blueTiming }}
+        red={{ color: "Red", ...lightPair.red }}
+        blue={{ color: "Blue", ...lightPair.blue }}
       />
     </section>
   );
@@ -239,7 +220,7 @@ export default function NurseryRecipeGroups({
 }: {
   targets: TargetCard[];
   timing: TimingCard[];
-  lighting: TimingCard[];
+  lighting: NurseryLighting;
   dayStart: number | null;
 }) {
   const common = [
@@ -264,7 +245,7 @@ export default function NurseryRecipeGroups({
           title="Top Trough"
           waterLength={findCard(timing, "Top water length")}
           waterEnable={findCard(timing, "Top water")}
-          lights={[findCard(lighting, "Top red"), findCard(lighting, "Top blue")]}
+          lightPair={lighting.top}
           common={common}
           dayStart={dayStart}
         />
@@ -272,7 +253,7 @@ export default function NurseryRecipeGroups({
           title="Bottom Trough"
           waterLength={findCard(timing, "Bottom water length")}
           waterEnable={findCard(timing, "Bottom water")}
-          lights={[findCard(lighting, "Bottom red"), findCard(lighting, "Bottom blue")]}
+          lightPair={lighting.bottom}
           common={common}
           dayStart={dayStart}
         />

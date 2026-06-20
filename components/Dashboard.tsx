@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import RecipeDashboard from "./RecipeDashboard";
 
 type TemperatureUnit = "C" | "F";
 type ZoneName = "Container" | "Nursery" | "Cultivation";
@@ -671,27 +672,8 @@ function ControlFoundation({ zoneGroups }: { zoneGroups: ZoneGroup[] }) {
   );
 }
 
-function RecipeFoundation() {
-  return (
-    <section className="foundation-grid">
-      <article className="foundation-card">
-        <p className="zone-kicker">Recipe</p>
-        <h2>Programming structure</h2>
-        <p>
-          Recipe data belongs in versioned configuration snapshots. Local settings contain the active recipe values, while programming
-          rules link conditions to action sets. This gives OpenCEA a path to compare targets, active calls, and live telemetry.
-        </p>
-      </article>
-      <article className="foundation-card">
-        <p className="zone-kicker">Farm identity</p>
-        <h2>PeaPod-1</h2>
-        <p>
-          Use the supplied controller ID and group ID as the durable database identity. The sample files still report farm_name as
-          default, so the human-readable farm name should be stored in OpenCEA's own farm registry table.
-        </p>
-      </article>
-    </section>
-  );
+function RecipeFoundation({ temperatureUnit }: { temperatureUnit: TemperatureUnit }) {
+  return <RecipeDashboard temperatureUnit={temperatureUnit} />;
 }
 
 export default function Dashboard({ initialRows }: { initialRows: ReportedStateRow[] }) {
@@ -815,7 +797,7 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
       ) : null}
 
       {activeSection === "control" ? <ControlFoundation zoneGroups={zoneGroups} /> : null}
-      {activeSection === "recipe" ? <RecipeFoundation /> : null}
+      {activeSection === "recipe" ? <RecipeFoundation temperatureUnit={temperatureUnit} /> : null}
     </main>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import NurseryRecipeGroups from "./NurseryRecipeGroups";
+import CultivationRecipeGroups from "./CultivationRecipeGroups";
 
 type TemperatureUnit = "C" | "F";
 
@@ -35,6 +37,45 @@ type TimingCard = {
   helper?: string;
 };
 
+type NurseryLightChannel = {
+  onDelay: number | null;
+  offDelay: number | null;
+  ppfd: number;
+};
+
+type NurseryLighting = {
+  top: {
+    red: NurseryLightChannel;
+    blue: NurseryLightChannel;
+  };
+  bottom: {
+    red: NurseryLightChannel;
+    blue: NurseryLightChannel;
+  };
+};
+
+type CultivationLightChannel = {
+  onDelay: number | null;
+  offDelay: number | null;
+  ppfd: number;
+};
+
+type CultivationLighting = {
+  left: {
+    red: CultivationLightChannel;
+    blue: CultivationLightChannel;
+  };
+  right: {
+    red: CultivationLightChannel;
+    blue: CultivationLightChannel;
+  };
+};
+
+const NURSERY_RED_PPFD = 270;
+const NURSERY_BLUE_PPFD = 70;
+const CULTIVATION_RED_PPFD = 270;
+const CULTIVATION_BLUE_PPFD = 70;
+
 function getRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -61,6 +102,39 @@ function firstNumberFrom(local: Record<string, unknown>, global: Record<string, 
   const localValue = firstNumber(local, keys);
   if (localValue !== null) return localValue;
   return firstNumber(global, keys);
+}
+
+function ppfdFromDimming(source: Record<string, unknown>, key: string): number | null {
+  const value = source[key];
+  const entries = Array.isArray(value) ? value : [value];
+
+  for (const entry of entries) {
+    if (typeof entry === "number" && Number.isFinite(entry)) return entry;
+    if (typeof entry === "string") {
+      const match = entry.match(/(\d+(?:\.\d+)?)\s*$/);
+      if (match) {
+        const parsed = Number(match[1]);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function firstPpfdFromDimming(
+  local: Record<string, unknown>,
+  global: Record<string, unknown>,
+  keys: string[],
+  fallback: number,
+) {
+  for (const key of keys) {
+    const localValue = ppfdFromDimming(local, key);
+    if (localValue !== null) return localValue;
+    const globalValue = ppfdFromDimming(global, key);
+    if (globalValue !== null) return globalValue;
+  }
+  return fallback;
 }
 
 function textSetting(source: Record<string, unknown>, key: string, fallback = "—") {
@@ -102,10 +176,11 @@ function formatSeconds(value: number | null) {
 function formatClockFromUtcSeconds(value: number | null) {
   if (value === null) return "—";
   const seconds = ((Math.round(value) % 86400) + 86400) % 86400;
-  const date = new Date(Date.UTC(2026, 0, 1, 0, 0, seconds));
+  const date = new Date(Date.UTC(2026, 5, 1, 0, 0, seconds));
   return new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
+    timeZone: process.env.NEXT_PUBLIC_FARM_TIME_ZONE ?? "America/New_York",
   }).format(date);
 }
 
@@ -222,7 +297,7 @@ function ZoneRecipePanel({
   return (
     <section className="recipe-panel recipe-zone-panel">
       <SectionHeader kicker={`${zone} Zone`} title={title} copy={copy} />
-      {targets && targets.length > 0 ? <TargetGrid cards={targets} /> : null}
+      {targets && targets.length > 0 ? <ClimateMatrix cards={targets} /> : null}
       {timingSections.map((section) => (
         <div className="recipe-zone-subsection" key={section.title}>
           <h3 className="recipe-subtitle">{section.title}</h3>
@@ -389,6 +464,8 @@ export default function RecipeDashboard({ temperatureUnit = "C" }: { temperature
       { label: "Water offset", value: formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_water_offset", "cultivation_water_offset"])) },
       { label: "Left water", value: enabled(firstNumberFrom(local, global, ["cultivation_left_water_enable", "pgm_cultivation_left_water_enable"])) },
       { label: "Right water", value: enabled(firstNumberFrom(local, global, ["cultivation_right_water_enable", "pgm_cultivation_right_water_enable"])) },
+      { label: "Left 24h water", value: enabled(firstNumberFrom(local, global, ["cultivation_left_water_24hr_enable", "pgm_cultivation_left_water_24hr_enable"])) },
+      { label: "Right 24h water", value: enabled(firstNumberFrom(local, global, ["cultivation_right_water_24hr_enable", "pgm_cultivation_right_water_24hr_enable"])) },
       { label: "Recirculation", value: enabled(firstNumberFrom(local, global, ["cultivation_recirc_enable", "pgm_cultivation_recirculation_enable", "cultivation_recirculation_enable"])) },
       { label: "EC autodose", value: enabled(firstNumberFrom(local, global, ["cultivation_autodose_enable_ec", "pgm_cultivation_autodose_enable_ec"])) },
       { label: "pH autodose", value: enabled(firstNumberFrom(local, global, ["cultivation_autodose_enable_ph", "pgm_cultivation_autodose_enable_ph"])) },
@@ -412,19 +489,59 @@ export default function RecipeDashboard({ temperatureUnit = "C" }: { temperature
       { label: "Flow rate", value: formatNumber(cultivationFlow, "mL/min") },
     ];
 
-    const nurseryLighting: TimingCard[] = [
-      { label: "Top red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_red_light_on_delay", "pgm_nursery_top_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_red_light_off_delay", "pgm_nursery_top_red_off_delay"]))}` },
-      { label: "Top blue", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_blue_light_on_delay", "pgm_nursery_top_blue_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_blue_light_off_delay", "pgm_nursery_top_blue_off_delay"]))}` },
-      { label: "Bottom red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_on_delay", "pgm_nursery_bottom_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_off_delay", "pgm_nursery_bottom_red_off_delay"]))}` },
-      { label: "Bottom blue", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_blue_light_on_delay", "pgm_nursery_bottom_blue_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_blue_light_off_delay", "pgm_nursery_bottom_blue_off_delay"]))}` },
-    ];
+    const nurseryLighting: NurseryLighting = {
+      top: {
+        red: {
+          onDelay: firstNumberFrom(local, global, ["pgm_nursery_top_red_light_on_delay", "pgm_nursery_top_red_on_delay"]),
+          offDelay: firstNumberFrom(local, global, ["pgm_nursery_top_red_light_off_delay", "pgm_nursery_top_red_off_delay"]),
+          ppfd: NURSERY_RED_PPFD,
+        },
+        blue: {
+          onDelay: firstNumberFrom(local, global, ["pgm_nursery_top_blue_light_on_delay", "pgm_nursery_top_blue_on_delay"]),
+          offDelay: firstNumberFrom(local, global, ["pgm_nursery_top_blue_light_off_delay", "pgm_nursery_top_blue_off_delay"]),
+          ppfd: NURSERY_BLUE_PPFD,
+        },
+      },
+      bottom: {
+        red: {
+          onDelay: firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_on_delay", "pgm_nursery_bottom_red_on_delay"]),
+          offDelay: firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_off_delay", "pgm_nursery_bottom_red_off_delay"]),
+          ppfd: NURSERY_RED_PPFD,
+        },
+        blue: {
+          onDelay: firstNumberFrom(local, global, ["pgm_nursery_bottom_blue_light_on_delay", "pgm_nursery_bottom_blue_on_delay"]),
+          offDelay: firstNumberFrom(local, global, ["pgm_nursery_bottom_blue_light_off_delay", "pgm_nursery_bottom_blue_off_delay"]),
+          ppfd: NURSERY_BLUE_PPFD,
+        },
+      },
+    };
 
-    const cultivationLighting: TimingCard[] = [
-      { label: "Left red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_on_delay", "pgm_cultivation_left_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_off_delay", "pgm_cultivation_left_red_off_delay"]))}` },
-      { label: "Left blue", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_blue_light_on_delay", "pgm_cultivation_left_blue_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_blue_light_off_delay", "pgm_cultivation_left_blue_off_delay"]))}` },
-      { label: "Right red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_on_delay", "pgm_cultivation_right_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_off_delay", "pgm_cultivation_right_red_off_delay"]))}` },
-      { label: "Right blue", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_blue_light_on_delay", "pgm_cultivation_right_blue_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_blue_light_off_delay", "pgm_cultivation_right_blue_off_delay"]))}` },
-    ];
+    const cultivationLighting: CultivationLighting = {
+      left: {
+        red: {
+          onDelay: firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_on_delay", "pgm_cultivation_left_red_on_delay"]),
+          offDelay: firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_off_delay", "pgm_cultivation_left_red_off_delay"]),
+          ppfd: firstPpfdFromDimming(local, global, ["cultivation_left_red_dimming", "pgm_cultivation_left_red_dimming"], CULTIVATION_RED_PPFD),
+        },
+        blue: {
+          onDelay: firstNumberFrom(local, global, ["pgm_cultivation_left_blue_light_on_delay", "pgm_cultivation_left_blue_on_delay"]),
+          offDelay: firstNumberFrom(local, global, ["pgm_cultivation_left_blue_light_off_delay", "pgm_cultivation_left_blue_off_delay"]),
+          ppfd: firstPpfdFromDimming(local, global, ["cultivation_left_blue_dimming", "pgm_cultivation_left_blue_dimming"], CULTIVATION_BLUE_PPFD),
+        },
+      },
+      right: {
+        red: {
+          onDelay: firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_on_delay", "pgm_cultivation_right_red_on_delay"]),
+          offDelay: firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_off_delay", "pgm_cultivation_right_red_off_delay"]),
+          ppfd: firstPpfdFromDimming(local, global, ["cultivation_right_red_dimming", "pgm_cultivation_right_red_dimming"], CULTIVATION_RED_PPFD),
+        },
+        blue: {
+          onDelay: firstNumberFrom(local, global, ["pgm_cultivation_right_blue_light_on_delay", "pgm_cultivation_right_blue_on_delay"]),
+          offDelay: firstNumberFrom(local, global, ["pgm_cultivation_right_blue_light_off_delay", "pgm_cultivation_right_blue_off_delay"]),
+          ppfd: firstPpfdFromDimming(local, global, ["cultivation_right_blue_dimming", "pgm_cultivation_right_blue_dimming"], CULTIVATION_BLUE_PPFD),
+        },
+      },
+    };
 
     return {
       configs,
@@ -442,6 +559,7 @@ export default function RecipeDashboard({ temperatureUnit = "C" }: { temperature
         updatedAt: configs.local_settings?.payload_updated_at,
       },
       climateTargets,
+      dayStart,
       nurseryTargets,
       cultivationTargets,
       containerSchedule,
@@ -484,28 +602,19 @@ export default function RecipeDashboard({ temperatureUnit = "C" }: { temperature
 
       <ContainerRecipePanel targets={parsed.climateTargets} schedule={parsed.containerSchedule} />
 
-      <ZoneRecipePanel
-        zone="Nursery"
-        title="Nursery recipe"
-        copy="Nursery chemistry, irrigation, lighting, recirculation, and dose timing values."
+      <NurseryRecipeGroups
         targets={parsed.nurseryTargets}
-        timingSections={[
-          { title: "Watering and operation", cards: parsed.nurseryTiming },
-          { title: "Lighting", cards: parsed.nurseryLighting },
-          { title: "Dosing summary", cards: parsed.nurseryDosing },
-        ]}
+        timing={parsed.nurseryTiming}
+        lighting={parsed.nurseryLighting}
+        dayStart={parsed.dayStart}
       />
 
-      <ZoneRecipePanel
-        zone="Cultivation"
-        title="Cultivation recipe"
-        copy="Cultivation chemistry, irrigation, lighting, recirculation, and dosing values."
+      <CultivationRecipeGroups
         targets={parsed.cultivationTargets}
-        timingSections={[
-          { title: "Watering and operation", cards: parsed.cultivationTiming },
-          { title: "Lighting", cards: parsed.cultivationLighting },
-          { title: "Dosing summary", cards: parsed.cultivationDosing },
-        ]}
+        timing={parsed.cultivationTiming}
+        dosing={parsed.cultivationDosing}
+        lighting={parsed.cultivationLighting}
+        dayStart={parsed.dayStart}
       />
 
       <SafetySummary rules={parsed.rules} actions={parsed.actions} modes={parsed.modes} />

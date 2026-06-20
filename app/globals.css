@@ -616,3 +616,679 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+
+/* OpenCEA recipe dashboard */
+.recipe-dashboard {
+  display: grid;
+  gap: 20px;
+  margin-top: 18px;
+}
+
+.recipe-hero-panel,
+.recipe-panel,
+.recipe-loading {
+  background: rgba(17, 24, 39, 0.86);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+  padding: 22px;
+}
+
+.recipe-hero-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.recipe-hero-panel h2,
+.recipe-section-header h2 {
+  margin: 0;
+}
+
+.recipe-hero-panel p,
+.recipe-section-header p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.recipe-meta-grid,
+.recipe-target-grid,
+.recipe-timing-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.recipe-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recipe-meta-grid div,
+.recipe-target-card,
+.recipe-timing-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.recipe-meta-grid span,
+.recipe-target-card span,
+.recipe-timing-card span,
+.target-pair small,
+.recipe-timing-card small {
+  color: var(--muted);
+}
+
+.recipe-meta-grid strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.88rem;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.recipe-target-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recipe-timing-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.target-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.target-pair div {
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.08);
+  padding: 10px;
+}
+
+.target-pair strong,
+.recipe-timing-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.1rem;
+  line-height: 1.25;
+}
+
+.recipe-target-card p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.recipe-subtitle {
+  margin: 20px 0 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+}
+
+.recipe-loading {
+  color: var(--muted);
+}
+
+@media (max-width: 1000px) {
+  .recipe-hero-panel,
+  .recipe-target-grid,
+  .recipe-timing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .recipe-hero-panel,
+  .recipe-meta-grid,
+  .recipe-target-grid,
+  .recipe-timing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recipe-hero-panel,
+  .recipe-panel,
+  .recipe-loading {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .target-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* OpenCEA compact container recipe */
+.recipe-container-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.recipe-container-panel .recipe-section-header p {
+  margin-bottom: 0;
+}
+
+.recipe-container-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.45fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.recipe-climate-matrix {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.climate-matrix-header,
+.climate-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr);
+  gap: 10px;
+  align-items: center;
+  padding: 11px 14px;
+}
+
+.climate-matrix-header {
+  background: rgba(56, 189, 248, 0.08);
+  border-bottom: 1px solid var(--border);
+}
+
+.climate-matrix-header span,
+.climate-matrix-header strong,
+.climate-matrix-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.climate-matrix-row + .climate-matrix-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.climate-matrix-row strong {
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.recipe-zone-panel > .recipe-climate-matrix {
+  margin-top: 12px;
+}
+
+.recipe-timing-grid-compact {
+  grid-template-columns: 1fr;
+  gap: 10px;
+  height: 100%;
+}
+
+.recipe-timing-card-compact {
+  display: grid;
+  align-content: center;
+  padding: 12px 14px;
+  min-height: auto;
+}
+
+.recipe-timing-card-compact strong {
+  font-size: 1.08rem;
+}
+
+.recipe-timing-card-compact small {
+  margin-top: 3px;
+}
+
+@media (max-width: 1000px) {
+  .recipe-container-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .recipe-timing-grid-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .climate-matrix-header,
+  .climate-matrix-row {
+    grid-template-columns: minmax(94px, 0.9fr) repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .climate-matrix-row strong {
+    font-size: 0.94rem;
+  }
+
+  .recipe-timing-grid-compact {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .climate-matrix-header,
+  .climate-matrix-row {
+    grid-template-columns: 1fr;
+  }
+
+  .climate-matrix-header strong {
+    display: none;
+  }
+
+  .climate-matrix-row strong:nth-child(2)::before {
+    content: "Day: ";
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+
+  .climate-matrix-row strong:nth-child(3)::before {
+    content: "Night: ";
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+}
+
+/* OpenCEA mobile climate table override */
+@media (max-width: 420px) {
+  .recipe-climate-matrix .climate-matrix-header,
+  .recipe-climate-matrix .climate-matrix-row {
+    grid-template-columns: minmax(86px, 0.9fr) minmax(82px, 1fr) minmax(82px, 1fr);
+    gap: 6px;
+    padding: 10px 8px;
+  }
+
+  .recipe-climate-matrix .climate-matrix-header strong {
+    display: block;
+  }
+
+  .recipe-climate-matrix .climate-matrix-header span,
+  .recipe-climate-matrix .climate-matrix-header strong,
+  .recipe-climate-matrix .climate-matrix-row span {
+    font-size: 0.72rem;
+  }
+
+  .recipe-climate-matrix .climate-matrix-row strong {
+    font-size: 0.82rem;
+  }
+
+  .recipe-climate-matrix .climate-matrix-row strong:nth-child(2)::before,
+  .recipe-climate-matrix .climate-matrix-row strong:nth-child(3)::before {
+    content: none;
+  }
+}
+
+/* OpenCEA nursery trough recipe grouping */
+.recipe-nursery-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.recipe-trough-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.recipe-trough-group {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.recipe-trough-header h3 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+
+.recipe-trough-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recipe-trough-metric {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 12px;
+}
+
+.recipe-trough-metric span,
+.recipe-trough-metric small {
+  color: var(--muted);
+}
+
+.recipe-trough-metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1rem;
+}
+
+.recipe-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 8px;
+  border-radius: 999px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.84rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.recipe-status-pill.enabled {
+  background: rgba(34, 197, 94, 0.14);
+  color: var(--good);
+}
+
+.recipe-status-pill.disabled,
+.recipe-status-pill.unknown {
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--warning);
+}
+
+.recipe-status-dot {
+  width: 0.68rem;
+  height: 0.68rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.12);
+}
+
+.recipe-status-pill.enabled .recipe-status-dot {
+  box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.12);
+}
+
+.recipe-trough-lighting {
+  margin-top: 14px;
+}
+
+.recipe-trough-lighting h4 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 900px) {
+  .recipe-trough-stack {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .recipe-trough-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* OpenCEA nursery light cards */
+.recipe-light-card {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 14px;
+}
+
+.recipe-light-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.recipe-light-card-header h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.recipe-light-card-header span {
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 900;
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+}
+
+.recipe-light-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.recipe-light-channel {
+  display: grid;
+  gap: 9px;
+}
+
+.recipe-light-channel h5 {
+  margin: 0 0 2px;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.recipe-light-channel h5.light-red {
+  color: #fb7185;
+}
+
+.recipe-light-channel h5.light-blue {
+  color: #38bdf8;
+}
+
+.recipe-light-time-row {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 7px;
+}
+
+.recipe-light-time-row span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.recipe-light-time-row strong {
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.recipe-light-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.recipe-light-footer strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.recipe-light-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.recipe-light-summary span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.recipe-light-summary strong {
+  color: var(--text);
+}
+
+@media (max-width: 520px) {
+  .recipe-light-channel-grid,
+  .recipe-light-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* OpenCEA cultivation row map */
+.recipe-cultivation-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.cultivation-layout-map {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.cultivation-layout-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.cultivation-layout-header h3 {
+  margin: 0;
+}
+
+.cultivation-layout-header span {
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 900;
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+}
+
+.cultivation-row-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cultivation-row-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 220px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 12px;
+}
+
+.cultivation-row-card.left {
+  border-color: rgba(56, 189, 248, 0.34);
+}
+
+.cultivation-row-card.right {
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.cultivation-row-code {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(56, 189, 248, 0.13);
+  color: var(--accent);
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.cultivation-row-card.right .cultivation-row-code {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--good);
+}
+
+.cultivation-row-card h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.cultivation-row-card p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.cultivation-row-facts {
+  display: grid;
+  gap: 6px;
+}
+
+.cultivation-row-facts span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding-bottom: 6px;
+}
+
+.cultivation-row-facts strong {
+  color: var(--text);
+}
+
+.cultivation-side-stack {
+  margin-top: 0;
+}
+
+.cultivation-side-group .recipe-trough-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .cultivation-row-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .cultivation-layout-header {
+    display: grid;
+  }
+
+  .cultivation-layout-header span {
+    width: fit-content;
+  }
+
+  .cultivation-row-grid,
+  .cultivation-side-group .recipe-trough-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cultivation-row-card {
+    min-height: auto;
+  }
+}
