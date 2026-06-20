@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type TemperatureUnit = "C" | "F";
 type ZoneName = "Container" | "Nursery" | "Cultivation";
 type MetricRow = "primary" | "secondary" | "other";
+type AppSection = "monitoring" | "control" | "recipe";
 
 type ModuleListEntry = {
   alias_key: string;
@@ -42,6 +52,25 @@ type ApiResponse = {
   error?: string;
 };
 
+type HistoryPoint = {
+  alias_key: string;
+  display_name: string;
+  zone: string;
+  io_key: string;
+  module_id: string;
+  device_type: string;
+  sampled_at: string;
+  value: number;
+};
+
+type HistoryApiResponse = {
+  ok: boolean;
+  count?: number;
+  generated_at?: string;
+  data?: HistoryPoint[];
+  error?: string;
+};
+
 type Metric = {
   id: string;
   key: string;
@@ -60,8 +89,29 @@ type ZoneGroup = {
   metrics: Metric[];
 };
 
+type ChartDefinition = {
+  aliasKey: string;
+  title: string;
+  subtitle: string;
+  unit: string;
+  zone: ZoneName;
+  kind: "temperature" | "number" | "percent";
+};
+
 const ZONES: ZoneName[] = ["Container", "Nursery", "Cultivation"];
 const TEMP_KEYS = new Set(["temp", "temperature", "water_temperature", "air_temperature"]);
+
+const CHARTS: ChartDefinition[] = [
+  { aliasKey: "air_temperature", title: "Air Temperature", subtitle: "Container climate", unit: "°C", zone: "Container", kind: "temperature" },
+  { aliasKey: "relative_humidity", title: "Humidity", subtitle: "Container RH", unit: "%", zone: "Container", kind: "percent" },
+  { aliasKey: "co2", title: "CO₂", subtitle: "Container ppm", unit: "ppm", zone: "Container", kind: "number" },
+  { aliasKey: "nursery_ph", title: "Nursery pH", subtitle: "Root-zone acidity", unit: "pH", zone: "Nursery", kind: "number" },
+  { aliasKey: "nursery_ec", title: "Nursery EC", subtitle: "Nutrient strength", unit: "µS/cm", zone: "Nursery", kind: "number" },
+  { aliasKey: "nursery_tank_depth", title: "Nursery Tank", subtitle: "Tank depth", unit: "%", zone: "Nursery", kind: "percent" },
+  { aliasKey: "cultivation_ph", title: "Cultivation pH", subtitle: "Root-zone acidity", unit: "pH", zone: "Cultivation", kind: "number" },
+  { aliasKey: "cultivation_ec", title: "Cultivation EC", subtitle: "Nutrient strength", unit: "µS/cm", zone: "Cultivation", kind: "number" },
+  { aliasKey: "cultivation_tank_depth", title: "Cultivation Tank", subtitle: "Tank depth", unit: "%", zone: "Cultivation", kind: "percent" },
+];
 
 const CONTAINER_PRIMARY_ALIASES = new Set(["air_temperature", "relative_humidity", "co2"]);
 const CONTAINER_NUTRIENT_LEVEL_ALIASES = new Set([
@@ -175,6 +225,12 @@ function formatPercent(value: number) {
   return `${rounded}%`;
 }
 
+function formatNumber(value: number) {
+  if (Math.abs(value) >= 100) return value.toFixed(0);
+  if (Math.abs(value) >= 10) return value.toFixed(1).replace(/\.0$/, "");
+  return value.toFixed(2).replace(/\.00$/, "");
+}
+
 function formatValue(value: unknown, metric: Metric, temperatureUnit: TemperatureUnit) {
   if (typeof value === "number") {
     if (isTroughLevelMetric(metric)) {
@@ -201,14 +257,8 @@ function formatValue(value: unknown, metric: Metric, temperatureUnit: Temperatur
     return Number.isInteger(value) ? value.toString() : value.toFixed(2);
   }
 
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-
-  if (value === null || value === undefined) {
-    return "—";
-  }
-
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (value === null || value === undefined) return "—";
   return String(value);
 }
 
@@ -252,7 +302,7 @@ function getMetricRow(metric: Metric): MetricRow {
 function rowTitle(zone: ZoneName, row: MetricRow) {
   if (zone === "Container") {
     if (row === "primary") return "Farm-wide climate";
-    if (row === "secondary") return "Nutrient tank levels";
+    if (row === "secondary") return "Nutrient and pH supply tanks";
     return "Other container controls";
   }
 
@@ -316,6 +366,34 @@ function buildZoneGroups(rows: ReportedStateRow[]): ZoneGroup[] {
   }));
 }
 
+function getLatestMetricValue(zoneGroups: ZoneGroup[], aliasKey: string) {
+  for (const group of zoneGroups) {
+    const metric = group.metrics.find((item) => item.aliasKey === aliasKey);
+    if (metric && typeof metric.value === "number") return metric.value;
+  }
+  return null;
+}
+
+function formatChartValue(value: number | null, chart: ChartDefinition, temperatureUnit: TemperatureUnit) {
+  if (value === null) return "—";
+  if (chart.kind === "temperature") {
+    const converted = temperatureUnit === "F" ? celsiusToFahrenheit(value) : value;
+    return `${converted.toFixed(1)} °${temperatureUnit}`;
+  }
+  if (chart.kind === "percent") return formatPercent(value);
+  return `${formatNumber(value)} ${chart.unit}`;
+}
+
+function getChartData(history: HistoryPoint[], chart: ChartDefinition, temperatureUnit: TemperatureUnit) {
+  return history
+    .filter((point) => point.alias_key === chart.aliasKey)
+    .map((point) => ({
+      sampledAt: point.sampled_at,
+      label: new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(point.sampled_at)),
+      value: chart.kind === "temperature" && temperatureUnit === "F" ? celsiusToFahrenheit(point.value) : point.value,
+    }));
+}
+
 function MetricCard({ metric, temperatureUnit }: { metric: Metric; temperatureUnit: TemperatureUnit }) {
   return (
     <div className="metric" key={metric.id}>
@@ -323,6 +401,86 @@ function MetricCard({ metric, temperatureUnit }: { metric: Metric; temperatureUn
       <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
       <small className="module-id">{metric.deviceId} · {metric.key}</small>
     </div>
+  );
+}
+
+function ChartCard({
+  chart,
+  history,
+  currentValue,
+  temperatureUnit,
+}: {
+  chart: ChartDefinition;
+  history: HistoryPoint[];
+  currentValue: number | null;
+  temperatureUnit: TemperatureUnit;
+}) {
+  const chartData = getChartData(history, chart, temperatureUnit);
+  const unit = chart.kind === "temperature" ? `°${temperatureUnit}` : chart.unit;
+
+  return (
+    <article className="chart-card">
+      <div className="chart-card-header">
+        <div>
+          <p className="zone-kicker">{chart.zone}</p>
+          <h3>{chart.title}</h3>
+          <span>{chart.subtitle}</span>
+        </div>
+        <strong>{formatChartValue(currentValue, chart, temperatureUnit)}</strong>
+      </div>
+
+      <div className="chart-frame">
+        {chartData.length > 1 ? (
+          <ResponsiveContainer width="100%" height={150}>
+            <AreaChart data={chartData} margin={{ left: 0, right: 4, top: 10, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`fill-${chart.aliasKey}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="currentColor" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="currentColor" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="label" minTickGap={24} tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} width={42} domain={["auto", "auto"]} />
+              <Tooltip
+                formatter={(value: unknown) => [`${formatNumber(Number(value))} ${unit}`, chart.title]}
+                labelFormatter={(_: unknown, payload?: Array<{ payload?: { sampledAt?: string } }>) => {
+                  const sampledAt = payload?.[0]?.payload?.sampledAt;
+                  return sampledAt ? formatDate(sampledAt) : "Sample";
+                }}
+              />
+              <Area type="monotone" dataKey="value" stroke="currentColor" fill={`url(#fill-${chart.aliasKey})`} strokeWidth={2} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="chart-empty">Need more historical snapshots to draw a trend.</div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function ChartGrid({
+  zoneGroups,
+  history,
+  temperatureUnit,
+}: {
+  zoneGroups: ZoneGroup[];
+  history: HistoryPoint[];
+  temperatureUnit: TemperatureUnit;
+}) {
+  return (
+    <section className="chart-grid">
+      {CHARTS.map((chart) => (
+        <ChartCard
+          key={chart.aliasKey}
+          chart={chart}
+          history={history}
+          currentValue={getLatestMetricValue(zoneGroups, chart.aliasKey)}
+          temperatureUnit={temperatureUnit}
+        />
+      ))}
+    </section>
   );
 }
 
@@ -406,28 +564,86 @@ function ZoneCard({ group, temperatureUnit }: { group: ZoneGroup; temperatureUni
   );
 }
 
+function ControlFoundation() {
+  return (
+    <section className="foundation-grid">
+      <article className="foundation-card">
+        <p className="zone-kicker">Control</p>
+        <h2>Read-only foundation</h2>
+        <p>
+          The uploaded controller files show action sets for outputs, dosing, images, calibration, cleaning, and safety routines.
+          The dashboard is intentionally read-only for now; command execution should be added only after authentication, audit logging,
+          and safety interlocks are designed.
+        </p>
+      </article>
+      <article className="foundation-card">
+        <p className="zone-kicker">Modes</p>
+        <h2>Operational modes</h2>
+        <p>
+          The next useful step is a database-backed control model that surfaces available modes by zone, then maps each entry/exit mode
+          to its action set before allowing any manual command path.
+        </p>
+      </article>
+    </section>
+  );
+}
+
+function RecipeFoundation() {
+  return (
+    <section className="foundation-grid">
+      <article className="foundation-card">
+        <p className="zone-kicker">Recipe</p>
+        <h2>Programming structure</h2>
+        <p>
+          Recipe data belongs in versioned configuration snapshots. Local settings contain the active recipe values, while programming
+          rules link conditions to action sets. This gives OpenCEA a path to compare targets, active calls, and live telemetry.
+        </p>
+      </article>
+      <article className="foundation-card">
+        <p className="zone-kicker">Farm identity</p>
+        <h2>PeaPod-1</h2>
+        <p>
+          Use the supplied controller ID and group ID as the durable database identity. The sample files still report farm_name as
+          default, so the human-readable farm name should be stored in OpenCEA's own farm registry table.
+        </p>
+      </article>
+    </section>
+  );
+}
+
 export default function Dashboard({ initialRows }: { initialRows: ReportedStateRow[] }) {
   const refreshSeconds = Number(process.env.NEXT_PUBLIC_REFRESH_SECONDS ?? "30");
+  const farmName = process.env.NEXT_PUBLIC_FARM_NAME ?? "PeaPod-1";
   const [rows, setRows] = useState<ReportedStateRow[]>(initialRows);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [lastRefresh, setLastRefresh] = useState<string>(new Date().toISOString());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>("C");
+  const [activeSection, setActiveSection] = useState<AppSection>("monitoring");
 
   async function refresh() {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/reported-state/latest", { cache: "no-store" });
-      const payload = (await response.json()) as ApiResponse;
+      const [latestResponse, historyResponse] = await Promise.all([
+        fetch("/api/reported-state/latest", { cache: "no-store" }),
+        fetch("/api/reported-state/history?hours=24", { cache: "no-store" }),
+      ]);
+      const latestPayload = (await latestResponse.json()) as ApiResponse;
+      const historyPayload = (await historyResponse.json()) as HistoryApiResponse;
 
-      if (!response.ok || !payload.ok || !payload.data) {
-        throw new Error(payload.error ?? "Failed to load reported state data.");
+      if (!latestResponse.ok || !latestPayload.ok || !latestPayload.data) {
+        throw new Error(latestPayload.error ?? "Failed to load reported state data.");
       }
 
-      setRows(payload.data);
-      setLastRefresh(payload.generated_at ?? new Date().toISOString());
+      setRows(latestPayload.data);
+      setLastRefresh(latestPayload.generated_at ?? new Date().toISOString());
+
+      if (historyResponse.ok && historyPayload.ok && historyPayload.data) {
+        setHistory(historyPayload.data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -436,6 +652,7 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
   }
 
   useEffect(() => {
+    refresh();
     const interval = window.setInterval(refresh, refreshSeconds * 1000);
     return () => window.clearInterval(interval);
   }, [refreshSeconds]);
@@ -444,11 +661,13 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
   const zoneGroups = useMemo(() => buildZoneGroups(connectedRows), [connectedRows]);
 
   const summary = useMemo(() => {
-    const mappedValues = zoneGroups.reduce((total, group) => total + group.metrics.length, 0);
     const activeZones = zoneGroups.filter((group) => group.metrics.length > 0).length;
-    const types = new Set(connectedRows.map((row) => row.device_type)).size;
+    const latestDeviceUpdate = connectedRows
+      .map((row) => row.device_last_update_at)
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
 
-    return { connectedDevices: connectedRows.length, mappedValues, activeZones, types };
+    return { connectedDevices: connectedRows.length, activeZones, latestDeviceUpdate };
   }, [connectedRows, zoneGroups]);
 
   return (
@@ -456,27 +675,20 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
       <section className="hero">
         <div>
           <p className="eyebrow">OpenCEA Dashboard</p>
-          <h1>Farm zone telemetry</h1>
+          <h1>{farmName}</h1>
           <p className="hero-copy">
-            Live view of connected CEA container modules, grouped by Container, Nursery, and Cultivation using the module_list mapping.
+            Open-source visibility for CEA container farms. Monitoring is live now; Control and Recipe foundations are staged for safe expansion.
           </p>
         </div>
         <div className="hero-actions">
+          <div className="toggle-group" aria-label="Dashboard section">
+            <button className={activeSection === "monitoring" ? "toggle active" : "toggle"} onClick={() => setActiveSection("monitoring")} type="button">Monitoring</button>
+            <button className={activeSection === "control" ? "toggle active" : "toggle"} onClick={() => setActiveSection("control")} type="button">Control</button>
+            <button className={activeSection === "recipe" ? "toggle active" : "toggle"} onClick={() => setActiveSection("recipe")} type="button">Recipe</button>
+          </div>
           <div className="toggle-group" aria-label="Temperature unit">
-            <button
-              className={temperatureUnit === "C" ? "toggle active" : "toggle"}
-              onClick={() => setTemperatureUnit("C")}
-              type="button"
-            >
-              °C
-            </button>
-            <button
-              className={temperatureUnit === "F" ? "toggle active" : "toggle"}
-              onClick={() => setTemperatureUnit("F")}
-              type="button"
-            >
-              °F
-            </button>
+            <button className={temperatureUnit === "C" ? "toggle active" : "toggle"} onClick={() => setTemperatureUnit("C")} type="button">°C</button>
+            <button className={temperatureUnit === "F" ? "toggle active" : "toggle"} onClick={() => setTemperatureUnit("F")} type="button">°F</button>
           </div>
           <button onClick={refresh} disabled={loading} type="button">
             {loading ? "Refreshing..." : "Refresh now"}
@@ -484,22 +696,18 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
         </div>
       </section>
 
-      <section className="summary-grid">
+      <section className="summary-grid compact-summary">
         <div className="summary-card">
           <span>Connected modules</span>
           <strong>{summary.connectedDevices}</strong>
         </div>
         <div className="summary-card">
-          <span>Mapped values</span>
-          <strong>{summary.mappedValues}</strong>
-        </div>
-        <div className="summary-card">
           <span>Active zones</span>
           <strong>{summary.activeZones}</strong>
         </div>
-        <div className="summary-card">
-          <span>Module types</span>
-          <strong>{summary.types}</strong>
+        <div className="summary-card wide-summary">
+          <span>Latest module update</span>
+          <strong>{formatDate(summary.latestDeviceUpdate)}</strong>
         </div>
       </section>
 
@@ -510,11 +718,19 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
 
       {error ? <div className="error-box">{error}</div> : null}
 
-      <section className="zone-grid">
-        {zoneGroups.map((group) => (
-          <ZoneCard key={group.zone} group={group} temperatureUnit={temperatureUnit} />
-        ))}
-      </section>
+      {activeSection === "monitoring" ? (
+        <>
+          <ChartGrid zoneGroups={zoneGroups} history={history} temperatureUnit={temperatureUnit} />
+          <section className="zone-grid">
+            {zoneGroups.map((group) => (
+              <ZoneCard key={group.zone} group={group} temperatureUnit={temperatureUnit} />
+            ))}
+          </section>
+        </>
+      ) : null}
+
+      {activeSection === "control" ? <ControlFoundation /> : null}
+      {activeSection === "recipe" ? <RecipeFoundation /> : null}
     </main>
   );
 }

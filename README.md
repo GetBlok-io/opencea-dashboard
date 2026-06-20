@@ -1,72 +1,64 @@
-# opencea-dashboard
+# OpenCEA Dashboard
 
-Next.js dashboard for reported state telemetry from CEA container farms, designed around Freight Farms container deployments while remaining open-source and brand-neutral in naming.
+OpenCEA Dashboard is an open-source visibility dashboard for CEA container farms. This build is designed around Freight Farms-style controller exports while keeping the project name and codebase brand-neutral.
 
-The app reads the latest connected module snapshots from PostgreSQL table `reported_state`, enriches each mapped IO value with friendly names from `module_list`, and displays the farm by operational zone:
+## Current scope
 
-- Container
-- Nursery
-- Cultivation
-
-## Current display behavior
-
-- Disconnected modules are hidden.
-- Values are grouped by `module_list.zone`.
-- Card titles are zone names instead of raw hardware module types.
-- Module IDs and IO keys are temporarily displayed under each metric for troubleshooting mapping issues.
-- Temperatures are assumed to be Celsius at source and can be toggled to Fahrenheit.
-- Output and pump values render as `OFF` for `0` and `ON` for `1`.
-- Trough level values render as `FULL` for `0` and `EMPTY` for `1`.
-- Container nutrient tank level values render as `OK` for `0` and `LOW` for `1`. Nursery and Cultivation nutrient/pH entries mapped to `pump_*` keys are treated as dosing pumps and render as `OFF` / `ON`, not tank levels.
-- Tank depth and left/right send pressure values render as percentages.
-- Container rows are organized as climate, nutrient tank levels, then other controls.
-- Nursery and Cultivation rows are organized as water chemistry, water levels, then pumps/lights/controls.
-
-## Environment variables
-
-Create a `.env` file locally:
-
-```env
-DATABASE_URL=postgresql://user:password@host:5432/database
-NEXT_PUBLIC_REFRESH_SECONDS=30
-```
-
-For Railway, add the same variables in the service Variables tab.
+- Monitoring dashboard backed by `reported_state` and `module_list`
+- Zone grouping for Container, Nursery, and Cultivation
+- Celsius/Fahrenheit temperature toggle
+- Visual trend cards for temperature, humidity, CO2, pH, EC, and tank depth using Recharts
+- Read-only Control and Recipe foundation views
+- Optional farm configuration snapshot schema/importer for controller configuration files
 
 ## Local development
 
 ```bash
 npm install
+cp .env.example .env
 npm run dev
 ```
 
-Open:
+Open `http://localhost:3000`.
 
-```txt
-http://localhost:3000
+## Required environment variables
+
+```env
+DATABASE_URL=postgresql://user:password@host:5432/database
+NEXT_PUBLIC_REFRESH_SECONDS=30
+NEXT_PUBLIC_FARM_NAME=PeaPod-1
 ```
 
-## Database requirement
+## Optional farm configuration registry
 
-This dashboard expects both tables to exist:
+The sample controller files can be placed in `/data` and imported into PostgreSQL for future Control and Recipe expansion.
 
-```sql
-reported_state
-module_list
-```
-
-The `module_list` table should be populated by the scraper/import process before deploying this dashboard. If the mapping is missing, the dashboard will have no mapped values to show under the three zone groupings.
-
-## Railway
-
-Build command:
+Create the tables:
 
 ```bash
-npm run build
+psql "$DATABASE_URL" -f db/farm_config_schema.sql
 ```
 
-Start command:
+Install Python importer dependency:
 
 ```bash
-npm start
+pip install -r scripts/requirements.txt
 ```
+
+Import config snapshots:
+
+```bash
+export CONTROLLER_ID="e5f03cd6-8d1c-11ed-897e-17d755fdf10c"
+export GROUP_ID="e7aaaf4e-28c2-4e3f-81be-1584b4386416"
+export FARM_NAME="PeaPod-1"
+python scripts/import_farm_config.py
+```
+
+## Existing database dependencies
+
+The dashboard still expects:
+
+- `reported_state`
+- `module_list`
+
+The historical chart cards use the existing `reported_state` table and will become more useful as repeated scraper snapshots accumulate.

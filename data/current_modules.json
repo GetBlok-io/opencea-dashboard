@@ -1,0 +1,34 @@
+{
+  "B8D61ABFF438":{
+    "type":"integrated-environmental",
+    "name":""
+  },
+  "083AF2141314":{
+    "type":"environmental",
+    "name":""
+  },
+  "943CC6E224C0":{
+    "type":"input",
+    "name":""
+  },
+  "C4DD57B410A4":{
+    "type":"dosing",
+    "name":""
+  },
+  "C4DD57B42420":{
+    "type":"dosing",
+    "name":""
+  },
+  "083AF2136380":{
+    "type":"output",
+    "name":""
+  },
+  "943CC6E23CB4":{
+    "type":"input",
+    "name":""
+  },
+  "B8D61ABFF1F0":{
+    "type":"integrated-dosing",
+    "name":""
+  }
+}
