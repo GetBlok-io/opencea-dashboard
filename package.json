@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/apply_dashboard_chart_patches.js && next dev",
-    "build": "node scripts/apply_dashboard_chart_patches.js && next build",
+    "dev": "node scripts/apply_dashboard_chart_patches.js && node scripts/apply_recipe_container_patch.js && next dev",
+    "build": "node scripts/apply_dashboard_chart_patches.js && node scripts/apply_recipe_container_patch.js && next build",
     "start": "next start",
     "lint": "next lint || true"
   },
