@@ -28,22 +28,23 @@ const clockFunctionRegex = /function formatClockFromUtcSeconds\(value: number \|
 const directClockFunction = [
   'function formatClockFromUtcSeconds(value: number | null) {',
   '  if (value === null) return "—";',
-  '  const totalSeconds = ((Math.round(value) % 86400) + 86400) % 86400;',
-  '  const hours24 = Math.floor(totalSeconds / 3600);',
-  '  const minutes = Math.floor((totalSeconds % 3600) / 60);',
-  '  const period = hours24 >= 12 ? "PM" : "AM";',
-  '  const hours12 = hours24 % 12 || 12;',
-  '  return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;',
+  '  const seconds = ((Math.round(value) % 86400) + 86400) % 86400;',
+  '  const date = new Date(Date.UTC(2026, 5, 1, 0, 0, seconds));',
+  '  return new Intl.DateTimeFormat(undefined, {',
+  '    hour: "numeric",',
+  '    minute: "2-digit",',
+  '    timeZone: process.env.NEXT_PUBLIC_FARM_TIME_ZONE ?? "America/New_York",',
+  '  }).format(date);',
   '}',
 ].join("\n");
 
-if (!recipe.includes('const totalSeconds = ((Math.round(value) % 86400) + 86400) % 86400;')) {
+if (!recipe.includes('timeZone: process.env.NEXT_PUBLIC_FARM_TIME_ZONE ?? "America/New_York"')) {
   if (!clockFunctionRegex.test(recipe)) {
     throw new Error("Could not find formatClockFromUtcSeconds in RecipeDashboard.tsx");
   }
   recipe = recipe.replace(clockFunctionRegex, directClockFunction);
   fs.writeFileSync(recipePath, recipe);
-  console.log("Patched recipe clock formatting to avoid browser timezone shifting.");
+  console.log("Patched recipe clock formatting to farm timezone.");
 } else {
   console.log("Recipe clock formatting already patched.");
 }
