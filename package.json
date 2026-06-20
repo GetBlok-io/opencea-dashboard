@@ -12,11 +12,10 @@
     "@types/pg": "^8.11.11",
     "next": "^15.1.6",
     "pg": "^8.13.1",
-    "psql": "^0.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-is": "^19.0.0",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "react-is": "^19.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

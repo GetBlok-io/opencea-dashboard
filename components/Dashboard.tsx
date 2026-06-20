@@ -444,7 +444,7 @@ function ChartCard({
               <YAxis tickLine={false} axisLine={false} width={42} domain={["auto", "auto"]} />
               <Tooltip
                 formatter={(value: unknown) => [`${formatNumber(Number(value))} ${unit}`, chart.title]}
-                labelFormatter={(_: unknown, payload?: Array<{ payload?: { sampledAt?: string } }>) => {
+                labelFormatter={(_, payload: readonly { payload?: { sampledAt?: string } }[]) => {
                   const sampledAt = payload?.[0]?.payload?.sampledAt;
                   return sampledAt ? formatDate(sampledAt) : "Sample";
                 }}
