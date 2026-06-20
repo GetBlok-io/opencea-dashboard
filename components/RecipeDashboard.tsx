@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type TemperatureUnit = "C" | "F";
+
 type ConfigSnapshot = {
   config_name: string;
   source_filename: string;
@@ -72,9 +74,10 @@ function celsiusToFahrenheit(value: number) {
   return value * (9 / 5) + 32;
 }
 
-function formatTemperature(value: number | null) {
+function formatTemperature(value: number | null, unit: TemperatureUnit) {
   if (value === null) return "—";
-  return `${value.toFixed(1)} °C / ${celsiusToFahrenheit(value).toFixed(0)} °F`;
+  if (unit === "F") return `${celsiusToFahrenheit(value).toFixed(1)} °F`;
+  return `${value.toFixed(1)} °C`;
 }
 
 function formatNumber(value: number | null, unit = "") {
@@ -121,11 +124,11 @@ function SectionHeader({ kicker, title, copy }: { kicker: string; title: string;
   );
 }
 
-function TargetGrid({ cards }: { cards: TargetCard[] }) {
+function TargetGrid({ cards, compact = false }: { cards: TargetCard[]; compact?: boolean }) {
   return (
-    <div className="recipe-target-grid">
+    <div className={compact ? "recipe-target-grid recipe-target-grid-compact" : "recipe-target-grid"}>
       {cards.map((card) => (
-        <article className="recipe-target-card" key={card.label}>
+        <article className={compact ? "recipe-target-card recipe-target-card-compact" : "recipe-target-card"} key={card.label}>
           <span>{card.label}</span>
           <div className="target-pair">
             <div>
@@ -144,17 +147,33 @@ function TargetGrid({ cards }: { cards: TargetCard[] }) {
   );
 }
 
-function TimingGrid({ cards }: { cards: TimingCard[] }) {
+function TimingGrid({ cards, compact = false }: { cards: TimingCard[]; compact?: boolean }) {
   return (
-    <div className="recipe-timing-grid">
+    <div className={compact ? "recipe-timing-grid recipe-timing-grid-compact" : "recipe-timing-grid"}>
       {cards.map((card) => (
-        <article className="recipe-timing-card" key={card.label}>
+        <article className={compact ? "recipe-timing-card recipe-timing-card-compact" : "recipe-timing-card"} key={card.label}>
           <span>{card.label}</span>
           <strong>{card.value}</strong>
           {card.helper ? <small>{card.helper}</small> : null}
         </article>
       ))}
     </div>
+  );
+}
+
+function ContainerRecipePanel({ targets, schedule }: { targets: TargetCard[]; schedule: TimingCard[] }) {
+  return (
+    <section className="recipe-panel recipe-zone-panel recipe-container-panel">
+      <SectionHeader
+        kicker="Container Zone"
+        title="Container climate recipe"
+        copy="Farm-wide environmental targets and recipe day timing."
+      />
+      <TargetGrid cards={targets} compact />
+      <div className="recipe-schedule-inline">
+        <TimingGrid cards={schedule} compact />
+      </div>
+    </section>
   );
 }
 
@@ -208,7 +227,7 @@ function SafetySummary({ rules, actions, modes }: { rules: Record<string, unknow
   );
 }
 
-export default function RecipeDashboard() {
+export default function RecipeDashboard({ temperatureUnit = "C" }: { temperatureUnit?: TemperatureUnit }) {
   const [payload, setPayload] = useState<RecipeApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -258,12 +277,12 @@ export default function RecipeDashboard() {
 
     const climateTargets: TargetCard[] = [
       {
-        label: "Air temperature",
-        day: formatTemperature(numberSetting(local, "pgm_day_temperature")),
-        night: formatTemperature(numberSetting(local, "pgm_night_temperature")),
+        label: "Air Temp",
+        day: formatTemperature(numberSetting(local, "pgm_day_temperature"), temperatureUnit),
+        night: formatTemperature(numberSetting(local, "pgm_night_temperature"), temperatureUnit),
       },
       {
-        label: "Relative humidity",
+        label: "Humidity",
         day: formatNumber(numberSetting(local, "pgm_day_rh"), "%"),
         night: formatNumber(numberSetting(local, "pgm_night_rh"), "%"),
       },
@@ -317,9 +336,7 @@ export default function RecipeDashboard() {
 
     const containerSchedule: TimingCard[] = [
       { label: "Day length", value: formatSeconds(dayLength) },
-      { label: "Day start", value: formatSeconds(dayStart), helper: "seconds from controller midnight" },
-      { label: "Config type", value: configType },
-      { label: "Units", value: units },
+      { label: "Day start", value: formatSeconds(dayStart), helper: "controller midnight offset" },
     ];
 
     const nurseryTiming: TimingCard[] = [
@@ -404,7 +421,7 @@ export default function RecipeDashboard() {
       nurseryLighting,
       cultivationLighting,
     };
-  }, [payload]);
+  }, [payload, temperatureUnit]);
 
   if (loading) {
     return <div className="recipe-loading">Loading recipe configuration...</div>;
@@ -434,13 +451,7 @@ export default function RecipeDashboard() {
         </div>
       </article>
 
-      <ZoneRecipePanel
-        zone="Container"
-        title="Container climate recipe"
-        copy="Farm-wide environmental targets and schedule settings that define the recipe day."
-        targets={parsed.climateTargets}
-        timingSections={[{ title: "Recipe schedule", cards: parsed.containerSchedule }]}
-      />
+      <ContainerRecipePanel targets={parsed.climateTargets} schedule={parsed.containerSchedule} />
 
       <ZoneRecipePanel
         zone="Nursery"
