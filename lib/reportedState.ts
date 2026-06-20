@@ -44,8 +44,11 @@ export async function getLatestReportedState(): Promise<ReportedStateRow[]> {
         mode,
         shadow
       FROM reported_state
-      WHERE connected IS TRUE
-      ORDER BY device_id, device_last_update_at DESC NULLS LAST, scraped_at DESC
+      ORDER BY
+        device_id,
+        (connected IS TRUE) DESC,
+        device_last_update_at DESC NULLS LAST,
+        scraped_at DESC
     )
     SELECT
       latest.id,
