@@ -32,13 +32,6 @@ type CultivationLighting = {
 
 type CultivationSide = "left" | "right";
 
-const CULTIVATION_ROWS: { code: string; label: string; side: CultivationSide }[] = [
-  { code: "L", label: "Left", side: "left" },
-  { code: "LM", label: "Left Middle", side: "left" },
-  { code: "RM", label: "Right Middle", side: "right" },
-  { code: "R", label: "Right", side: "right" },
-];
-
 function findCard(cards: TimingCard[], label: string): TimingCard {
   return cards.find((card) => card.label === label) ?? { label, value: "-" };
 }
@@ -83,11 +76,11 @@ function formatDli(value: number) {
 }
 
 function sideTitle(side: CultivationSide) {
-  return side === "left" ? "Left + Left Middle" : "Right Middle + Right";
+  return side === "left" ? "L / LM" : "RM / R";
 }
 
-function sideCode(side: CultivationSide) {
-  return side === "left" ? "L / LM" : "RM / R";
+function sideDescription(side: CultivationSide) {
+  return side === "left" ? "Left + Left Middle" : "Right Middle + Right";
 }
 
 function sideCards(side: CultivationSide, timing: TimingCard[]) {
@@ -182,7 +175,7 @@ function CultivationLightCard({
     <section className="recipe-light-card">
       <div className="recipe-light-card-header">
         <h4>{title} Light</h4>
-        <span>{sideCode(title.startsWith("Left") ? "left" : "right")}</span>
+        <span>{title}</span>
       </div>
       <div className="recipe-light-channel-grid">
         <LightChannel light={red} dayStart={dayStart} />
@@ -228,20 +221,20 @@ function CultivationIrrigationRows({ timing }: { timing: TimingCard[] }) {
       <div className="cultivation-layout-header">
         <div>
           <p className="zone-kicker">Irrigation schedule</p>
-          <h3>Row irrigation settings</h3>
+          <h3>Side irrigation settings</h3>
         </div>
-        <span>Per-row water recipe</span>
+        <span>L/LM and RM/R</span>
       </div>
 
-      <div className="cultivation-row-grid">
-        {CULTIVATION_ROWS.map((row) => {
-          const cards = sideCards(row.side, timing);
+      <div className="cultivation-row-grid cultivation-side-irrigation-grid">
+        {(["left", "right"] as CultivationSide[]).map((side) => {
+          const cards = sideCards(side, timing);
           return (
-            <article className={`cultivation-row-card ${row.side}`} key={row.code}>
-              <div className="cultivation-row-code">{row.code}</div>
+            <article className={`cultivation-row-card cultivation-side-irrigation-card ${side}`} key={side}>
+              <div className="cultivation-row-code">{sideTitle(side)}</div>
               <div>
-                <h4>{row.label}</h4>
-                <p>{sideTitle(row.side)} irrigation settings</p>
+                <h4>{sideDescription(side)}</h4>
+                <p>{sideTitle(side)} irrigation settings</p>
               </div>
               <div className="cultivation-row-facts cultivation-row-facts-irrigation">
                 <span>Duration <strong>{cards.waterLength.value}</strong></span>
@@ -266,7 +259,7 @@ function CultivationDosingSection({ timing, dosing }: { timing: TimingCard[]; do
   return (
     <div className="recipe-zone-subsection">
       <h3 className="recipe-subtitle">Dosing schedule</h3>
-      <div className="recipe-trough-grid cultivation-dosing-grid">
+      <div className="recipe-trough-grid cultivation-dosing-grid compact-dosing-grid">
         <CultivationMetricCard card={ecAutodose} status />
         <CultivationMetricCard card={phAutodose} status />
         {dosing.map((card) => (
