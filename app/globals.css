@@ -561,3 +561,58 @@ h2 {
     flex-direction: column;
   }
 }
+
+.zone-chart-grid-nursery,
+.zone-chart-grid-cultivation {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.trough-level-row {
+  justify-items: center;
+}
+
+.trough-level-row h3 {
+  text-align: center;
+}
+
+.trough-level-grid {
+  width: min(560px, 100%);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-content: center;
+}
+
+.control-section {
+  display: grid;
+  gap: 20px;
+  margin-top: 18px;
+}
+
+.control-note {
+  max-width: none;
+}
+
+.control-zone-panel .metric-count {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--warning);
+}
+
+.control-metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .zone-chart-grid-nursery,
+  .zone-chart-grid-cultivation,
+  .control-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .zone-chart-grid-nursery,
+  .zone-chart-grid-cultivation,
+  .trough-level-grid,
+  .control-metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
