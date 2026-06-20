@@ -107,10 +107,12 @@ const CHARTS: ChartDefinition[] = [
   { aliasKey: "co2", title: "CO₂", subtitle: "Container ppm", unit: "ppm", zone: "Container", kind: "number" },
   { aliasKey: "nursery_ph", title: "Nursery pH", subtitle: "Root-zone acidity", unit: "pH", zone: "Nursery", kind: "number" },
   { aliasKey: "nursery_ec", title: "Nursery EC", subtitle: "Nutrient strength", unit: "µS/cm", zone: "Nursery", kind: "number" },
-  { aliasKey: "nursery_tank_depth", title: "Nursery Tank", subtitle: "Tank depth", unit: "%", zone: "Nursery", kind: "percent" },
+  { aliasKey: "nursery_water_temperature", title: "Nursery Water Temperature", subtitle: "Tank water temperature", unit: "°C", zone: "Nursery", kind: "temperature" },
+  { aliasKey: "nursery_tank_depth", title: "Nursery Tank Depth", subtitle: "Tank depth", unit: "%", zone: "Nursery", kind: "percent" },
   { aliasKey: "cultivation_ph", title: "Cultivation pH", subtitle: "Root-zone acidity", unit: "pH", zone: "Cultivation", kind: "number" },
   { aliasKey: "cultivation_ec", title: "Cultivation EC", subtitle: "Nutrient strength", unit: "µS/cm", zone: "Cultivation", kind: "number" },
-  { aliasKey: "cultivation_tank_depth", title: "Cultivation Tank", subtitle: "Tank depth", unit: "%", zone: "Cultivation", kind: "percent" },
+  { aliasKey: "cultivation_water_temperature", title: "Cultivation Water Temperature", subtitle: "Tank water temperature", unit: "°C", zone: "Cultivation", kind: "temperature" },
+  { aliasKey: "cultivation_tank_depth", title: "Cultivation Tank Depth", subtitle: "Tank depth", unit: "%", zone: "Cultivation", kind: "percent" },
 ];
 
 const CONTAINER_PRIMARY_ALIASES = new Set(["air_temperature", "relative_humidity", "co2"]);
@@ -281,6 +283,10 @@ function isSwitchMetric(metric: Metric) {
   );
 }
 
+function isControlMetric(metric: Metric) {
+  return isSwitchMetric(metric);
+}
+
 function isChartedMetric(metric: Metric) {
   const alias = normalizeText(metric.aliasKey);
   return CHARTS.some((chart) => chart.aliasKey === alias);
@@ -321,11 +327,20 @@ function rowTitle(zone: ZoneName, row: MetricRow) {
   }
 
   if (row === "primary") return "Water chemistry";
-  if (row === "secondary") return "Water levels";
-  return "Pumps, lights, and controls";
+  if (row === "secondary") return "Trough levels";
+  return "Other monitoring values";
+}
+
+function metricSortPriority(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  if (alias === "top_trough_level") return 0;
+  if (alias === "bottom_trough_level") return 1;
+  return 10;
 }
 
 function sortMetrics(a: Metric, b: Metric) {
+  const priorityDelta = metricSortPriority(a) - metricSortPriority(b);
+  if (priorityDelta !== 0) return priorityDelta;
   if (a.order !== b.order) return a.order - b.order;
   if (a.label !== b.label) return a.label.localeCompare(b.label);
   if (a.deviceId !== b.deviceId) return a.deviceId.localeCompare(b.deviceId);
@@ -509,9 +524,10 @@ function ZoneMetricRow({
   if (metrics.length === 0) return null;
 
   const isNutrientLevelRow = zone === "Container" && row === "secondary";
+  const isTroughLevelRow = (zone === "Nursery" || zone === "Cultivation") && row === "secondary";
 
   return (
-    <section className="zone-row">
+    <section className={isTroughLevelRow ? "zone-row trough-level-row" : "zone-row"}>
       <h3>{rowTitle(zone, row)}</h3>
       {isNutrientLevelRow ? (
         <div className="metric metric-wide">
@@ -530,7 +546,7 @@ function ZoneMetricRow({
           </div>
         </div>
       ) : (
-        <div className="metric-grid">
+        <div className={isTroughLevelRow ? "metric-grid trough-level-grid" : "metric-grid"}>
           {metrics.map((metric) => (
             <MetricCard key={metric.id} metric={metric} temperatureUnit={temperatureUnit} />
           ))}
@@ -555,7 +571,7 @@ function ZoneMonitoringSection({
     .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
 
   const zoneCharts = CHARTS.filter((chart) => chart.zone === group.zone);
-  const nonChartMetrics = group.metrics.filter((metric) => !isChartedMetric(metric));
+  const nonChartMetrics = group.metrics.filter((metric) => !isChartedMetric(metric) && !isControlMetric(metric));
   const primary = nonChartMetrics.filter((metric) => getMetricRow(metric) === "primary").sort(sortMetrics);
   const secondary = nonChartMetrics.filter((metric) => getMetricRow(metric) === "secondary").sort(sortMetrics);
   const other = nonChartMetrics.filter((metric) => getMetricRow(metric) === "other").sort(sortMetrics);
@@ -573,7 +589,7 @@ function ZoneMonitoringSection({
       <p className="timestamp">Updated: {formatDate(latestUpdate)}</p>
 
       {zoneCharts.length > 0 ? (
-        <section className="zone-chart-grid">
+        <section className={`zone-chart-grid zone-chart-grid-${group.zone.toLowerCase()}`}>
           {zoneCharts.map((chart) => (
             <ChartCard
               key={chart.aliasKey}
@@ -601,26 +617,56 @@ function ZoneMonitoringSection({
   );
 }
 
-function ControlFoundation() {
+function ControlZoneSection({ group }: { group: ZoneGroup }) {
+  const controlMetrics = group.metrics.filter(isControlMetric).sort(sortMetrics);
+  const latestUpdate = controlMetrics
+    .map((metric) => metric.updatedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
+
   return (
-    <section className="foundation-grid">
-      <article className="foundation-card">
+    <article className="monitoring-zone-panel control-zone-panel">
+      <div className="zone-card-header">
+        <div>
+          <p className="zone-kicker">Read-only control</p>
+          <h2>{group.zone}</h2>
+        </div>
+        <span className="metric-count">{controlMetrics.length} controls</span>
+      </div>
+
+      <p className="timestamp">Updated: {formatDate(latestUpdate)}</p>
+
+      {controlMetrics.length > 0 ? (
+        <div className="metric-grid control-metric-grid">
+          {controlMetrics.map((metric) => (
+            <ToggleMetricCard key={metric.id} metric={metric} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty-zone">No connected mapped controls found for this zone.</div>
+      )}
+    </article>
+  );
+}
+
+function ControlFoundation({ zoneGroups }: { zoneGroups: ZoneGroup[] }) {
+  return (
+    <section className="control-section">
+      <article className="foundation-card control-note">
         <p className="zone-kicker">Control</p>
-        <h2>Read-only foundation</h2>
+        <h2>Read-only control status</h2>
         <p>
-          The uploaded controller files show action sets for outputs, dosing, images, calibration, cleaning, and safety routines.
-          The dashboard is intentionally read-only for now; command execution should be added only after authentication, audit logging,
-          and safety interlocks are designed.
+          Outputs, pumps, lights, fans, valves, and similar command-adjacent values are grouped here by zone.
+          These switches are status indicators only; command execution should be added only after authentication, audit logging,
+          role permissions, lockouts, and safety interlocks are designed.
         </p>
       </article>
-      <article className="foundation-card">
-        <p className="zone-kicker">Modes</p>
-        <h2>Operational modes</h2>
-        <p>
-          The next useful step is a database-backed control model that surfaces available modes by zone, then maps each entry/exit mode
-          to its action set before allowing any manual command path.
-        </p>
-      </article>
+
+      <div className="monitoring-zone-stack">
+        {zoneGroups.map((group) => (
+          <ControlZoneSection key={group.zone} group={group} />
+        ))}
+      </div>
     </section>
   );
 }
@@ -768,7 +814,7 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
         </section>
       ) : null}
 
-      {activeSection === "control" ? <ControlFoundation /> : null}
+      {activeSection === "control" ? <ControlFoundation zoneGroups={zoneGroups} /> : null}
       {activeSection === "recipe" ? <RecipeFoundation /> : null}
     </main>
   );
