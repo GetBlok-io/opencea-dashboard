@@ -4,6 +4,28 @@ const path = require("path");
 const dashboardPath = path.join(__dirname, "..", "components", "Dashboard.tsx");
 let source = fs.readFileSync(dashboardPath, "utf8");
 
+const recipeImport = 'import RecipeDashboard from "./RecipeDashboard";';
+if (!source.includes(recipeImport)) {
+  source = source.replace('} from "recharts";\n', `} from "recharts";\n${recipeImport}\n`);
+  fs.writeFileSync(dashboardPath, source);
+  console.log("Added RecipeDashboard import.");
+}
+
+source = fs.readFileSync(dashboardPath, "utf8");
+if (!source.includes("return <RecipeDashboard />;")) {
+  const recipeFoundationRegex = /function RecipeFoundation\(\) \{[\s\S]*?\n\}\n\nexport default function Dashboard/;
+  if (!recipeFoundationRegex.test(source)) {
+    throw new Error("Could not find RecipeFoundation block in Dashboard.tsx");
+  }
+  source = source.replace(
+    recipeFoundationRegex,
+    'function RecipeFoundation() {\n  return <RecipeDashboard />;\n}\n\nexport default function Dashboard',
+  );
+  fs.writeFileSync(dashboardPath, source);
+  console.log("Replaced placeholder recipe section with RecipeDashboard.");
+}
+
+source = fs.readFileSync(dashboardPath, "utf8");
 const marker = '  { aliasKey: "cultivation_left_send_pressure", title: "Left Send Pressure"';
 
 if (!source.includes(marker)) {
@@ -239,4 +261,161 @@ ${cssMarker}
   console.log("Applied status-card and mobile CSS refinements.");
 } else {
   console.log("Status-card and mobile CSS refinements already applied.");
+}
+
+css = fs.readFileSync(cssPath, "utf8");
+const recipeCssMarker = "/* OpenCEA recipe dashboard */";
+if (!css.includes(recipeCssMarker)) {
+  css += `
+
+${recipeCssMarker}
+.recipe-dashboard {
+  display: grid;
+  gap: 20px;
+  margin-top: 18px;
+}
+
+.recipe-hero-panel,
+.recipe-panel,
+.recipe-loading {
+  background: rgba(17, 24, 39, 0.86);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+  padding: 22px;
+}
+
+.recipe-hero-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.recipe-hero-panel h2,
+.recipe-section-header h2 {
+  margin: 0;
+}
+
+.recipe-hero-panel p,
+.recipe-section-header p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.recipe-meta-grid,
+.recipe-target-grid,
+.recipe-timing-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.recipe-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recipe-meta-grid div,
+.recipe-target-card,
+.recipe-timing-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.recipe-meta-grid span,
+.recipe-target-card span,
+.recipe-timing-card span,
+.target-pair small,
+.recipe-timing-card small {
+  color: var(--muted);
+}
+
+.recipe-meta-grid strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.88rem;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.recipe-target-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recipe-timing-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.target-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.target-pair div {
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.08);
+  padding: 10px;
+}
+
+.target-pair strong,
+.recipe-timing-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.1rem;
+  line-height: 1.25;
+}
+
+.recipe-target-card p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.recipe-subtitle {
+  margin: 20px 0 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+}
+
+.recipe-loading {
+  color: var(--muted);
+}
+
+@media (max-width: 1000px) {
+  .recipe-hero-panel,
+  .recipe-target-grid,
+  .recipe-timing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .recipe-hero-panel,
+  .recipe-meta-grid,
+  .recipe-target-grid,
+  .recipe-timing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recipe-hero-panel,
+  .recipe-panel,
+  .recipe-loading {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .target-pair {
+    grid-template-columns: 1fr;
+  }
+}
+`;
+  fs.writeFileSync(cssPath, css);
+  console.log("Applied recipe dashboard CSS.");
+} else {
+  console.log("Recipe dashboard CSS already applied.");
 }
