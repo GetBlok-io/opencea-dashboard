@@ -158,6 +158,33 @@ function TimingGrid({ cards }: { cards: TimingCard[] }) {
   );
 }
 
+function ZoneRecipePanel({
+  zone,
+  title,
+  copy,
+  targets,
+  timingSections,
+}: {
+  zone: string;
+  title: string;
+  copy: string;
+  targets?: TargetCard[];
+  timingSections: { title: string; cards: TimingCard[] }[];
+}) {
+  return (
+    <section className="recipe-panel recipe-zone-panel">
+      <SectionHeader kicker={`${zone} Zone`} title={title} copy={copy} />
+      {targets && targets.length > 0 ? <TargetGrid cards={targets} /> : null}
+      {timingSections.map((section) => (
+        <div className="recipe-zone-subsection" key={section.title}>
+          <h3 className="recipe-subtitle">{section.title}</h3>
+          <TimingGrid cards={section.cards} />
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function SafetySummary({ rules, actions, modes }: { rules: Record<string, unknown>; actions: Record<string, unknown>; modes: Record<string, unknown> }) {
   const ruleCount = Object.keys(rules).length;
   const actionCount = Object.keys(actions).length;
@@ -288,6 +315,13 @@ export default function RecipeDashboard() {
     const cultivationPhDown = firstNumberFrom(local, global, ["pgm_cultivation_ph_down_dose_length", "cultivation_ph_down_dose_length"]);
     const cultivationPhUp = firstNumberFrom(local, global, ["pgm_cultivation_ph_up_dose_length", "cultivation_ph_up_dose_length"]);
 
+    const containerSchedule: TimingCard[] = [
+      { label: "Day length", value: formatSeconds(dayLength) },
+      { label: "Day start", value: formatSeconds(dayStart), helper: "seconds from controller midnight" },
+      { label: "Config type", value: configType },
+      { label: "Units", value: units },
+    ];
+
     const nurseryTiming: TimingCard[] = [
       { label: "Water cycle", value: formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_water_cycle_length", "pgm_nursery_cycle_length", "nursery_cycle_length"])) },
       { label: "Top water length", value: formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_water_length", "nursery_top_water_length"])) },
@@ -330,13 +364,18 @@ export default function RecipeDashboard() {
       { label: "Flow rate", value: formatNumber(cultivationFlow, "mL/min") },
     ];
 
-    const lighting: TimingCard[] = [
-      { label: "Day length", value: formatSeconds(dayLength) },
-      { label: "Day start", value: formatSeconds(dayStart), helper: "seconds from controller midnight" },
-      { label: "Nursery top red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_red_light_on_delay", "pgm_nursery_top_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_red_light_off_delay", "pgm_nursery_top_red_off_delay"]))}` },
-      { label: "Nursery bottom red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_on_delay", "pgm_nursery_bottom_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_off_delay", "pgm_nursery_bottom_red_off_delay"]))}` },
-      { label: "Cultivation left red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_on_delay", "pgm_cultivation_left_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_off_delay", "pgm_cultivation_left_red_off_delay"]))}` },
-      { label: "Cultivation right red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_on_delay", "pgm_cultivation_right_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_off_delay", "pgm_cultivation_right_red_off_delay"]))}` },
+    const nurseryLighting: TimingCard[] = [
+      { label: "Top red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_red_light_on_delay", "pgm_nursery_top_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_red_light_off_delay", "pgm_nursery_top_red_off_delay"]))}` },
+      { label: "Top blue", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_blue_light_on_delay", "pgm_nursery_top_blue_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_blue_light_off_delay", "pgm_nursery_top_blue_off_delay"]))}` },
+      { label: "Bottom red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_on_delay", "pgm_nursery_bottom_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_off_delay", "pgm_nursery_bottom_red_off_delay"]))}` },
+      { label: "Bottom blue", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_blue_light_on_delay", "pgm_nursery_bottom_blue_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_blue_light_off_delay", "pgm_nursery_bottom_blue_off_delay"]))}` },
+    ];
+
+    const cultivationLighting: TimingCard[] = [
+      { label: "Left red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_on_delay", "pgm_cultivation_left_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_off_delay", "pgm_cultivation_left_red_off_delay"]))}` },
+      { label: "Left blue", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_blue_light_on_delay", "pgm_cultivation_left_blue_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_blue_light_off_delay", "pgm_cultivation_left_blue_off_delay"]))}` },
+      { label: "Right red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_on_delay", "pgm_cultivation_right_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_off_delay", "pgm_cultivation_right_red_off_delay"]))}` },
+      { label: "Right blue", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_blue_light_on_delay", "pgm_cultivation_right_blue_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_blue_light_off_delay", "pgm_cultivation_right_blue_off_delay"]))}` },
     ];
 
     return {
@@ -357,11 +396,13 @@ export default function RecipeDashboard() {
       climateTargets,
       nurseryTargets,
       cultivationTargets,
+      containerSchedule,
       nurseryTiming,
       cultivationTiming,
       nurseryDosing,
       cultivationDosing,
-      lighting,
+      nurseryLighting,
+      cultivationLighting,
     };
   }, [payload]);
 
@@ -393,33 +434,37 @@ export default function RecipeDashboard() {
         </div>
       </article>
 
-      <section className="recipe-panel">
-        <SectionHeader kicker="Container" title="Climate targets" copy="Day and night environmental targets from the active local recipe settings." />
-        <TargetGrid cards={parsed.climateTargets} />
-      </section>
+      <ZoneRecipePanel
+        zone="Container"
+        title="Container climate recipe"
+        copy="Farm-wide environmental targets and schedule settings that define the recipe day."
+        targets={parsed.climateTargets}
+        timingSections={[{ title: "Recipe schedule", cards: parsed.containerSchedule }]}
+      />
 
-      <section className="recipe-panel">
-        <SectionHeader kicker="Nursery" title="Nursery recipe" copy="Water chemistry, watering, recirculation, and dose timing values." />
-        <TargetGrid cards={parsed.nurseryTargets} />
-        <h3 className="recipe-subtitle">Watering and operation</h3>
-        <TimingGrid cards={parsed.nurseryTiming} />
-        <h3 className="recipe-subtitle">Dosing summary</h3>
-        <TimingGrid cards={parsed.nurseryDosing} />
-      </section>
+      <ZoneRecipePanel
+        zone="Nursery"
+        title="Nursery recipe"
+        copy="Nursery chemistry, irrigation, lighting, recirculation, and dose timing values."
+        targets={parsed.nurseryTargets}
+        timingSections={[
+          { title: "Watering and operation", cards: parsed.nurseryTiming },
+          { title: "Lighting", cards: parsed.nurseryLighting },
+          { title: "Dosing summary", cards: parsed.nurseryDosing },
+        ]}
+      />
 
-      <section className="recipe-panel">
-        <SectionHeader kicker="Cultivation" title="Cultivation recipe" copy="Cultivation chemistry, irrigation cycle, and dosing summary." />
-        <TargetGrid cards={parsed.cultivationTargets} />
-        <h3 className="recipe-subtitle">Watering and operation</h3>
-        <TimingGrid cards={parsed.cultivationTiming} />
-        <h3 className="recipe-subtitle">Dosing summary</h3>
-        <TimingGrid cards={parsed.cultivationDosing} />
-      </section>
-
-      <section className="recipe-panel">
-        <SectionHeader kicker="Lighting" title="Lighting schedule" copy="Timing is shown as offset from the recipe day start." />
-        <TimingGrid cards={parsed.lighting} />
-      </section>
+      <ZoneRecipePanel
+        zone="Cultivation"
+        title="Cultivation recipe"
+        copy="Cultivation chemistry, irrigation, lighting, recirculation, and dosing values."
+        targets={parsed.cultivationTargets}
+        timingSections={[
+          { title: "Watering and operation", cards: parsed.cultivationTiming },
+          { title: "Lighting", cards: parsed.cultivationLighting },
+          { title: "Dosing summary", cards: parsed.cultivationDosing },
+        ]}
+      />
 
       <SafetySummary rules={parsed.rules} actions={parsed.actions} modes={parsed.modes} />
     </section>
