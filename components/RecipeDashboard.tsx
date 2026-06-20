@@ -1,0 +1,395 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type ConfigSnapshot = {
+  config_name: string;
+  source_filename: string;
+  captured_at: string;
+  payload_updated_at: string | null;
+  payload_recipe_id: string | null;
+  payload_recipe_name: string | null;
+  config_payload: Record<string, unknown>;
+};
+
+type RecipeApiResponse = {
+  ok: boolean;
+  generated_at?: string;
+  count?: number;
+  configs?: Record<string, ConfigSnapshot>;
+  error?: string;
+};
+
+type TargetCard = {
+  label: string;
+  day: string;
+  night: string;
+  helper?: string;
+};
+
+type TimingCard = {
+  label: string;
+  value: string;
+  helper?: string;
+};
+
+function getRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function numberSetting(source: Record<string, unknown>, key: string): number | null {
+  const value = source[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function textSetting(source: Record<string, unknown>, key: string, fallback = "—") {
+  const value = source[key];
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
+}
+
+function celsiusToFahrenheit(value: number) {
+  return value * (9 / 5) + 32;
+}
+
+function formatTemperature(value: number | null) {
+  if (value === null) return "—";
+  return `${value.toFixed(1)} °C / ${celsiusToFahrenheit(value).toFixed(0)} °F`;
+}
+
+function formatNumber(value: number | null, unit = "") {
+  if (value === null) return "—";
+  const formatted = Number.isInteger(value) ? value.toString() : value.toFixed(2).replace(/\.00$/, "").replace(/0$/, "");
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function formatSeconds(value: number | null) {
+  if (value === null) return "—";
+  const total = Math.max(0, Math.round(value));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const parts: string[] = [];
+  if (hours) parts.push(`${hours} hr`);
+  if (minutes) parts.push(`${minutes} min`);
+  if (seconds || parts.length === 0) parts.push(`${seconds} sec`);
+  return parts.join(" ");
+}
+
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function doseVolume(seconds: number | null, mlPerMinute: number | null) {
+  if (seconds === null || mlPerMinute === null) return "—";
+  return `${((seconds / 60) * mlPerMinute).toFixed(1)} mL`;
+}
+
+function enabled(value: number | null) {
+  if (value === null) return "—";
+  return value === 1 ? "Enabled" : "Disabled";
+}
+
+function SectionHeader({ kicker, title, copy }: { kicker: string; title: string; copy?: string }) {
+  return (
+    <div className="recipe-section-header">
+      <p className="zone-kicker">{kicker}</p>
+      <h2>{title}</h2>
+      {copy ? <p>{copy}</p> : null}
+    </div>
+  );
+}
+
+function TargetGrid({ cards }: { cards: TargetCard[] }) {
+  return (
+    <div className="recipe-target-grid">
+      {cards.map((card) => (
+        <article className="recipe-target-card" key={card.label}>
+          <span>{card.label}</span>
+          <div className="target-pair">
+            <div>
+              <small>Day</small>
+              <strong>{card.day}</strong>
+            </div>
+            <div>
+              <small>Night</small>
+              <strong>{card.night}</strong>
+            </div>
+          </div>
+          {card.helper ? <p>{card.helper}</p> : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function TimingGrid({ cards }: { cards: TimingCard[] }) {
+  return (
+    <div className="recipe-timing-grid">
+      {cards.map((card) => (
+        <article className="recipe-timing-card" key={card.label}>
+          <span>{card.label}</span>
+          <strong>{card.value}</strong>
+          {card.helper ? <small>{card.helper}</small> : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function SafetySummary({ rules, actions, modes }: { rules: Record<string, unknown>; actions: Record<string, unknown>; modes: Record<string, unknown> }) {
+  const ruleCount = Object.keys(rules).length;
+  const actionCount = Object.keys(actions).length;
+  const modeCount = Object.keys(modes).length;
+
+  const safetyCards: TimingCard[] = [
+    { label: "Programming rules", value: formatNumber(ruleCount), helper: "Condition logic from programming_rules" },
+    { label: "Action sets", value: formatNumber(actionCount), helper: "Command recipes from programming_actions" },
+    { label: "Modes", value: formatNumber(modeCount), helper: "Calibration, cleaning, and task modes" },
+  ];
+
+  return (
+    <section className="recipe-panel">
+      <SectionHeader
+        kicker="Logic"
+        title="Safety and automation map"
+        copy="This read-only section summarizes the controller logic available for future rule-to-action visualization."
+      />
+      <TimingGrid cards={safetyCards} />
+    </section>
+  );
+}
+
+export default function RecipeDashboard() {
+  const [payload, setPayload] = useState<RecipeApiResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadRecipe() {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch("/api/recipe/current", { cache: "no-store" });
+        const nextPayload = (await response.json()) as RecipeApiResponse;
+        if (!response.ok || !nextPayload.ok) {
+          throw new Error(nextPayload.error ?? "Failed to load recipe configuration.");
+        }
+        if (active) setPayload(nextPayload);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Unknown recipe error");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadRecipe();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const parsed = useMemo(() => {
+    const configs = payload?.configs ?? {};
+    const local = getRecord(configs.local_settings?.config_payload);
+    const global = getRecord(configs.global_settings?.config_payload);
+    const rules = getRecord(configs.programming_rules?.config_payload);
+    const actions = getRecord(configs.programming_actions?.config_payload);
+    const modes = getRecord(configs.programming_modes?.config_payload);
+    const meta = getRecord(local.meta);
+
+    const recipeName = textSetting(local, "recipe_name", configs.local_settings?.payload_recipe_name ?? "Current recipe");
+    const recipeDescription = textSetting(meta, "recipe_description", "No recipe description provided.");
+    const recipeId = textSetting(meta, "recipe_id", configs.local_settings?.payload_recipe_id ?? "—");
+    const configType = textSetting(local, "config_type", textSetting(global, "config_type", "—"));
+    const units = textSetting(local, "units", textSetting(global, "units", "—"));
+    const dayLength = numberSetting(local, "pgm_day_length") ?? numberSetting(global, "day_length");
+    const dayStart = numberSetting(local, "day_start") ?? numberSetting(global, "day_start");
+
+    const climateTargets: TargetCard[] = [
+      {
+        label: "Air temperature",
+        day: formatTemperature(numberSetting(local, "pgm_day_temperature")),
+        night: formatTemperature(numberSetting(local, "pgm_night_temperature")),
+      },
+      {
+        label: "Relative humidity",
+        day: formatNumber(numberSetting(local, "pgm_day_rh"), "%"),
+        night: formatNumber(numberSetting(local, "pgm_night_rh"), "%"),
+      },
+      {
+        label: "CO₂",
+        day: formatNumber(numberSetting(local, "pgm_day_co2"), "ppm"),
+        night: formatNumber(numberSetting(local, "pgm_night_co2"), "ppm"),
+      },
+    ];
+
+    const nurseryTargets: TargetCard[] = [
+      {
+        label: "Nursery EC",
+        day: formatNumber(numberSetting(local, "pgm_nursery_day_ec"), "µS/cm"),
+        night: formatNumber(numberSetting(local, "pgm_nursery_night_ec"), "µS/cm"),
+      },
+      {
+        label: "Nursery pH",
+        day: formatNumber(numberSetting(local, "pgm_nursery_day_ph")),
+        night: formatNumber(numberSetting(local, "pgm_nursery_night_ph")),
+      },
+    ];
+
+    const cultivationTargets: TargetCard[] = [
+      {
+        label: "Cultivation EC",
+        day: formatNumber(numberSetting(local, "pgm_cultivation_day_ec"), "µS/cm"),
+        night: formatNumber(numberSetting(local, "pgm_cultivation_night_ec"), "µS/cm"),
+      },
+      {
+        label: "Cultivation pH",
+        day: formatNumber(numberSetting(local, "pgm_cultivation_day_ph")),
+        night: formatNumber(numberSetting(local, "pgm_cultivation_night_ph")),
+      },
+    ];
+
+    const nurseryFlow = numberSetting(local, "pgm_nursery_dosing_flow_rate") ?? numberSetting(global, "dosing_flow_rate");
+    const cultivationFlow = numberSetting(local, "pgm_cultivation_dosing_flow_rate") ?? numberSetting(global, "dosing_flow_rate");
+
+    const nurseryTiming: TimingCard[] = [
+      { label: "Water cycle", value: formatSeconds(numberSetting(local, "pgm_nursery_water_cycle_length")) },
+      { label: "Top water length", value: formatSeconds(numberSetting(local, "pgm_nursery_top_water_length")) },
+      { label: "Bottom water length", value: formatSeconds(numberSetting(local, "pgm_nursery_bottom_water_length")) },
+      { label: "Water offset", value: formatSeconds(numberSetting(local, "pgm_nursery_water_offset")) },
+      { label: "Recirculation", value: enabled(numberSetting(local, "pgm_nursery_recirculation_enable")) },
+      { label: "Autodose", value: enabled(numberSetting(local, "pgm_nursery_autodose_enable")) },
+    ];
+
+    const cultivationTiming: TimingCard[] = [
+      { label: "Water cycle", value: formatSeconds(numberSetting(local, "pgm_cultivation_water_cycle_length")) },
+      { label: "Left water length", value: formatSeconds(numberSetting(local, "pgm_cultivation_left_water_length")) },
+      { label: "Right water length", value: formatSeconds(numberSetting(local, "pgm_cultivation_right_water_length")) },
+      { label: "Water offset", value: formatSeconds(numberSetting(local, "pgm_cultivation_water_offset")) },
+      { label: "Recirculation", value: enabled(numberSetting(local, "pgm_cultivation_recirculation_enable")) },
+      { label: "Autodose", value: enabled(numberSetting(local, "pgm_cultivation_autodose_enable")) },
+    ];
+
+    const nurseryDosing: TimingCard[] = [
+      { label: "Nutrient A dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ec_a_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ec_a_dose_length"), nurseryFlow) },
+      { label: "Nutrient B dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ec_b_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ec_b_dose_length"), nurseryFlow) },
+      { label: "Nutrient C dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ec_c_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ec_c_dose_length"), nurseryFlow) },
+      { label: "pH Down dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ph_down_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ph_down_dose_length"), nurseryFlow) },
+      { label: "pH Up dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ph_up_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ph_up_dose_length"), nurseryFlow) },
+      { label: "Flow rate", value: formatNumber(nurseryFlow, "mL/min") },
+    ];
+
+    const cultivationDosing: TimingCard[] = [
+      { label: "Nutrient A dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ec_a_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ec_a_dose_length"), cultivationFlow) },
+      { label: "Nutrient B dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ec_b_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ec_b_dose_length"), cultivationFlow) },
+      { label: "Nutrient C dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ec_c_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ec_c_dose_length"), cultivationFlow) },
+      { label: "pH Down dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ph_down_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ph_down_dose_length"), cultivationFlow) },
+      { label: "pH Up dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ph_up_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ph_up_dose_length"), cultivationFlow) },
+      { label: "Flow rate", value: formatNumber(cultivationFlow, "mL/min") },
+    ];
+
+    const lighting: TimingCard[] = [
+      { label: "Day length", value: formatSeconds(dayLength) },
+      { label: "Day start", value: formatSeconds(dayStart), helper: "seconds from controller midnight" },
+      { label: "Nursery top red", value: `${formatSeconds(numberSetting(local, "pgm_nursery_top_red_light_on_delay"))} → ${formatSeconds(numberSetting(local, "pgm_nursery_top_red_light_off_delay"))}` },
+      { label: "Nursery bottom red", value: `${formatSeconds(numberSetting(local, "pgm_nursery_bottom_red_light_on_delay"))} → ${formatSeconds(numberSetting(local, "pgm_nursery_bottom_red_light_off_delay"))}` },
+      { label: "Cultivation left red", value: `${formatSeconds(numberSetting(local, "pgm_cultivation_left_red_light_on_delay"))} → ${formatSeconds(numberSetting(local, "pgm_cultivation_left_red_light_off_delay"))}` },
+      { label: "Cultivation right red", value: `${formatSeconds(numberSetting(local, "pgm_cultivation_right_red_light_on_delay"))} → ${formatSeconds(numberSetting(local, "pgm_cultivation_right_red_light_off_delay"))}` },
+    ];
+
+    return {
+      configs,
+      local,
+      rules,
+      actions,
+      modes,
+      overview: {
+        recipeName,
+        recipeDescription,
+        recipeId,
+        configType,
+        units,
+        capturedAt: configs.local_settings?.captured_at,
+        updatedAt: configs.local_settings?.payload_updated_at,
+      },
+      climateTargets,
+      nurseryTargets,
+      cultivationTargets,
+      nurseryTiming,
+      cultivationTiming,
+      nurseryDosing,
+      cultivationDosing,
+      lighting,
+    };
+  }, [payload]);
+
+  if (loading) {
+    return <div className="recipe-loading">Loading recipe configuration...</div>;
+  }
+
+  if (error) {
+    return <div className="error-box">{error}</div>;
+  }
+
+  if (!payload?.ok || !parsed.configs.local_settings) {
+    return <div className="empty-zone">No imported local_settings recipe snapshot was found.</div>;
+  }
+
+  return (
+    <section className="recipe-dashboard">
+      <article className="recipe-hero-panel">
+        <div>
+          <p className="zone-kicker">Recipe overview</p>
+          <h2>{parsed.overview.recipeName}</h2>
+          <p>{parsed.overview.recipeDescription}</p>
+        </div>
+        <div className="recipe-meta-grid">
+          <div><span>Recipe ID</span><strong>{parsed.overview.recipeId}</strong></div>
+          <div><span>Config type</span><strong>{parsed.overview.configType}</strong></div>
+          <div><span>Units</span><strong>{parsed.overview.units}</strong></div>
+          <div><span>Imported</span><strong>{formatTimestamp(parsed.overview.capturedAt)}</strong></div>
+        </div>
+      </article>
+
+      <section className="recipe-panel">
+        <SectionHeader kicker="Container" title="Climate targets" copy="Day and night environmental targets from the active local recipe settings." />
+        <TargetGrid cards={parsed.climateTargets} />
+      </section>
+
+      <section className="recipe-panel">
+        <SectionHeader kicker="Nursery" title="Nursery recipe" copy="Water chemistry, watering, recirculation, and dose timing values." />
+        <TargetGrid cards={parsed.nurseryTargets} />
+        <h3 className="recipe-subtitle">Watering and operation</h3>
+        <TimingGrid cards={parsed.nurseryTiming} />
+        <h3 className="recipe-subtitle">Dosing summary</h3>
+        <TimingGrid cards={parsed.nurseryDosing} />
+      </section>
+
+      <section className="recipe-panel">
+        <SectionHeader kicker="Cultivation" title="Cultivation recipe" copy="Cultivation chemistry, irrigation cycle, and dosing summary." />
+        <TargetGrid cards={parsed.cultivationTargets} />
+        <h3 className="recipe-subtitle">Watering and operation</h3>
+        <TimingGrid cards={parsed.cultivationTiming} />
+        <h3 className="recipe-subtitle">Dosing summary</h3>
+        <TimingGrid cards={parsed.cultivationDosing} />
+      </section>
+
+      <section className="recipe-panel">
+        <SectionHeader kicker="Lighting" title="Lighting schedule" copy="Timing is shown as offset from the recipe day start." />
+        <TimingGrid cards={parsed.lighting} />
+      </section>
+
+      <SafetySummary rules={parsed.rules} actions={parsed.actions} modes={parsed.modes} />
+    </section>
+  );
+}
