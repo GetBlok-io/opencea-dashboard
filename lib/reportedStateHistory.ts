@@ -59,8 +59,7 @@ export async function getReportedStateHistory(hours = 24): Promise<ReportedState
     JOIN module_list ml
       ON ml.module_id = rs.device_id
       AND ml.io_key IS NOT NULL
-    WHERE rs.connected IS TRUE
-      AND COALESCE(rs.device_last_update_at, rs.scraped_at) >= NOW() - ($1::int * INTERVAL '1 hour')
+    WHERE COALESCE(rs.device_last_update_at, rs.scraped_at) >= NOW() - ($1::int * INTERVAL '1 hour')
       AND ml.alias_key = ANY($2::text[])
       AND rs.state ? ml.io_key
       AND (rs.state ->> ml.io_key) ~ '^-?[0-9]+(\\.[0-9]+)?$'
