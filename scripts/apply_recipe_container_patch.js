@@ -25,15 +25,17 @@ fs.writeFileSync(dashboardPath, dashboard);
 const recipePath = path.join(__dirname, "..", "components", "RecipeDashboard.tsx");
 let recipe = fs.readFileSync(recipePath, "utf8");
 const clockFunctionRegex = /function formatClockFromUtcSeconds\(value: number \| null\) \{[\s\S]*?\n\}/;
-const directClockFunction = `function formatClockFromUtcSeconds(value: number | null) {
-  if (value === null) return "—";
-  const totalSeconds = ((Math.round(value) % 86400) + 86400) % 86400;
-  const hours24 = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const period = hours24 >= 12 ? "PM" : "AM";
-  const hours12 = hours24 % 12 || 12;
-  return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
-}`;
+const directClockFunction = [
+  'function formatClockFromUtcSeconds(value: number | null) {',
+  '  if (value === null) return "—";',
+  '  const totalSeconds = ((Math.round(value) % 86400) + 86400) % 86400;',
+  '  const hours24 = Math.floor(totalSeconds / 3600);',
+  '  const minutes = Math.floor((totalSeconds % 3600) / 60);',
+  '  const period = hours24 >= 12 ? "PM" : "AM";',
+  '  const hours12 = hours24 % 12 || 12;',
+  '  return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;',
+  '}',
+].join("\n");
 
 if (!recipe.includes('const totalSeconds = ((Math.round(value) % 86400) + 86400) % 86400;')) {
   if (!clockFunctionRegex.test(recipe)) {
