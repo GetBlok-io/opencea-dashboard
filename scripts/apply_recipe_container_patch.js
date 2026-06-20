@@ -24,6 +24,14 @@ fs.writeFileSync(dashboardPath, dashboard);
 
 const recipePath = path.join(__dirname, "..", "components", "RecipeDashboard.tsx");
 let recipe = fs.readFileSync(recipePath, "utf8");
+
+if (!recipe.includes('import NurseryRecipeGroups from "./NurseryRecipeGroups";')) {
+  recipe = recipe.replace('import { useEffect, useMemo, useState } from "react";\n', 'import { useEffect, useMemo, useState } from "react";\nimport NurseryRecipeGroups from "./NurseryRecipeGroups";\n');
+  fs.writeFileSync(recipePath, recipe);
+  console.log("Added NurseryRecipeGroups import.");
+}
+
+recipe = fs.readFileSync(recipePath, "utf8");
 const clockFunctionRegex = /function formatClockFromUtcSeconds\(value: number \| null\) \{[\s\S]*?\n\}/;
 const directClockFunction = [
   'function formatClockFromUtcSeconds(value: number | null) {',
@@ -60,6 +68,33 @@ if (recipe.includes(zoneTargetGrid)) {
   console.log("Zone target sections already use day/night tables.");
 } else {
   console.log("Zone target section pattern not found; leaving unchanged.");
+}
+
+recipe = fs.readFileSync(recipePath, "utf8");
+const nurseryZoneBlock = `      <ZoneRecipePanel
+        zone="Nursery"
+        title="Nursery recipe"
+        copy="Nursery chemistry, irrigation, lighting, recirculation, and dose timing values."
+        targets={parsed.nurseryTargets}
+        timingSections={[
+          { title: "Watering and operation", cards: parsed.nurseryTiming },
+          { title: "Lighting", cards: parsed.nurseryLighting },
+          { title: "Dosing summary", cards: parsed.nurseryDosing },
+        ]}
+      />`;
+const nurseryGroupedBlock = `      <NurseryRecipeGroups
+        targets={parsed.nurseryTargets}
+        timing={parsed.nurseryTiming}
+        lighting={parsed.nurseryLighting}
+      />`;
+if (recipe.includes(nurseryZoneBlock)) {
+  recipe = recipe.replace(nurseryZoneBlock, nurseryGroupedBlock);
+  fs.writeFileSync(recipePath, recipe);
+  console.log("Patched Nursery section into top/bottom trough groups.");
+} else if (recipe.includes(nurseryGroupedBlock)) {
+  console.log("Nursery section already grouped by trough.");
+} else {
+  console.log("Nursery section pattern not found; leaving unchanged.");
 }
 
 const cssPath = path.join(__dirname, "..", "app", "globals.css");
@@ -246,4 +281,123 @@ ${mobileTableMarker}
   console.log("Applied mobile climate table override.");
 } else {
   console.log("Mobile climate table override already applied.");
+}
+
+css = fs.readFileSync(cssPath, "utf8");
+const nurseryTroughMarker = "/* OpenCEA nursery trough recipe grouping */";
+if (!css.includes(nurseryTroughMarker)) {
+  css += `
+
+${nurseryTroughMarker}
+.recipe-nursery-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.recipe-trough-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.recipe-trough-group {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.recipe-trough-header h3 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+
+.recipe-trough-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recipe-trough-metric {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 12px;
+}
+
+.recipe-trough-metric span,
+.recipe-trough-metric small {
+  color: var(--muted);
+}
+
+.recipe-trough-metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1rem;
+}
+
+.recipe-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 8px;
+  border-radius: 999px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.84rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.recipe-status-pill.enabled {
+  background: rgba(34, 197, 94, 0.14);
+  color: var(--good);
+}
+
+.recipe-status-pill.disabled,
+.recipe-status-pill.unknown {
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--warning);
+}
+
+.recipe-status-dot {
+  width: 0.68rem;
+  height: 0.68rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.12);
+}
+
+.recipe-status-pill.enabled .recipe-status-dot {
+  box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.12);
+}
+
+.recipe-trough-lighting {
+  margin-top: 14px;
+}
+
+.recipe-trough-lighting h4 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 900px) {
+  .recipe-trough-stack {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .recipe-trough-grid {
+    grid-template-columns: 1fr;
+  }
+}
+`;
+  fs.writeFileSync(cssPath, css);
+  console.log("Applied nursery trough grouping CSS.");
+} else {
+  console.log("Nursery trough grouping CSS already applied.");
 }
