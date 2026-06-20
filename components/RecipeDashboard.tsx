@@ -99,6 +99,16 @@ function formatSeconds(value: number | null) {
   return parts.join(" ");
 }
 
+function formatClockFromUtcSeconds(value: number | null) {
+  if (value === null) return "—";
+  const seconds = ((Math.round(value) % 86400) + 86400) % 86400;
+  const date = new Date(Date.UTC(2026, 0, 1, 0, 0, seconds));
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function formatTimestamp(value: string | null | undefined) {
   if (!value) return "—";
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -124,11 +134,11 @@ function SectionHeader({ kicker, title, copy }: { kicker: string; title: string;
   );
 }
 
-function TargetGrid({ cards, compact = false }: { cards: TargetCard[]; compact?: boolean }) {
+function TargetGrid({ cards }: { cards: TargetCard[] }) {
   return (
-    <div className={compact ? "recipe-target-grid recipe-target-grid-compact" : "recipe-target-grid"}>
+    <div className="recipe-target-grid">
       {cards.map((card) => (
-        <article className={compact ? "recipe-target-card recipe-target-card-compact" : "recipe-target-card"} key={card.label}>
+        <article className="recipe-target-card" key={card.label}>
           <span>{card.label}</span>
           <div className="target-pair">
             <div>
@@ -142,6 +152,25 @@ function TargetGrid({ cards, compact = false }: { cards: TargetCard[]; compact?:
           </div>
           {card.helper ? <p>{card.helper}</p> : null}
         </article>
+      ))}
+    </div>
+  );
+}
+
+function ClimateMatrix({ cards }: { cards: TargetCard[] }) {
+  return (
+    <div className="recipe-climate-matrix">
+      <div className="climate-matrix-header">
+        <span>Target</span>
+        <strong>Day</strong>
+        <strong>Night</strong>
+      </div>
+      {cards.map((card) => (
+        <div className="climate-matrix-row" key={card.label}>
+          <span>{card.label}</span>
+          <strong>{card.day}</strong>
+          <strong>{card.night}</strong>
+        </div>
       ))}
     </div>
   );
@@ -167,10 +196,10 @@ function ContainerRecipePanel({ targets, schedule }: { targets: TargetCard[]; sc
       <SectionHeader
         kicker="Container Zone"
         title="Container climate recipe"
-        copy="Farm-wide environmental targets and recipe day timing."
+        copy="Farm-wide day/night environmental targets and recipe timing."
       />
-      <TargetGrid cards={targets} compact />
-      <div className="recipe-schedule-inline">
+      <div className="recipe-container-layout">
+        <ClimateMatrix cards={targets} />
         <TimingGrid cards={schedule} compact />
       </div>
     </section>
@@ -274,6 +303,7 @@ export default function RecipeDashboard({ temperatureUnit = "C" }: { temperature
     const units = textSetting(local, "units", textSetting(global, "units", "—"));
     const dayLength = firstNumberFrom(local, global, ["pgm_day_length", "day_length"]);
     const dayStart = firstNumberFrom(local, global, ["day_start"]);
+    const nightStart = dayStart !== null && dayLength !== null ? dayStart + dayLength : null;
 
     const climateTargets: TargetCard[] = [
       {
@@ -335,8 +365,9 @@ export default function RecipeDashboard({ temperatureUnit = "C" }: { temperature
     const cultivationPhUp = firstNumberFrom(local, global, ["pgm_cultivation_ph_up_dose_length", "cultivation_ph_up_dose_length"]);
 
     const containerSchedule: TimingCard[] = [
-      { label: "Day length", value: formatSeconds(dayLength) },
-      { label: "Day start", value: formatSeconds(dayStart), helper: "controller midnight offset" },
+      { label: "Day Start", value: formatClockFromUtcSeconds(dayStart), helper: "local display from controller time" },
+      { label: "Night Start", value: formatClockFromUtcSeconds(nightStart), helper: "day start + day length" },
+      { label: "Day Length", value: formatSeconds(dayLength) },
     ];
 
     const nurseryTiming: TimingCard[] = [
