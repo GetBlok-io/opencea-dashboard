@@ -22,6 +22,30 @@ if (dashboard.includes('{activeSection === "recipe" ? <RecipeFoundation /> : nul
 
 fs.writeFileSync(dashboardPath, dashboard);
 
+const recipePath = path.join(__dirname, "..", "components", "RecipeDashboard.tsx");
+let recipe = fs.readFileSync(recipePath, "utf8");
+const clockFunctionRegex = /function formatClockFromUtcSeconds\(value: number \| null\) \{[\s\S]*?\n\}/;
+const directClockFunction = `function formatClockFromUtcSeconds(value: number | null) {
+  if (value === null) return "—";
+  const totalSeconds = ((Math.round(value) % 86400) + 86400) % 86400;
+  const hours24 = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const period = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+  return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
+}`;
+
+if (!recipe.includes('const totalSeconds = ((Math.round(value) % 86400) + 86400) % 86400;')) {
+  if (!clockFunctionRegex.test(recipe)) {
+    throw new Error("Could not find formatClockFromUtcSeconds in RecipeDashboard.tsx");
+  }
+  recipe = recipe.replace(clockFunctionRegex, directClockFunction);
+  fs.writeFileSync(recipePath, recipe);
+  console.log("Patched recipe clock formatting to avoid browser timezone shifting.");
+} else {
+  console.log("Recipe clock formatting already patched.");
+}
+
 const cssPath = path.join(__dirname, "..", "app", "globals.css");
 let css = fs.readFileSync(cssPath, "utf8");
 const marker = "/* OpenCEA compact container recipe */";
@@ -162,4 +186,44 @@ ${marker}
   console.log("Applied compact container recipe CSS.");
 } else {
   console.log("Compact container recipe CSS already applied.");
+}
+
+css = fs.readFileSync(cssPath, "utf8");
+const mobileTableMarker = "/* OpenCEA mobile climate table override */";
+if (!css.includes(mobileTableMarker)) {
+  css += `
+
+${mobileTableMarker}
+@media (max-width: 420px) {
+  .recipe-climate-matrix .climate-matrix-header,
+  .recipe-climate-matrix .climate-matrix-row {
+    grid-template-columns: minmax(86px, 0.9fr) minmax(82px, 1fr) minmax(82px, 1fr);
+    gap: 6px;
+    padding: 10px 8px;
+  }
+
+  .recipe-climate-matrix .climate-matrix-header strong {
+    display: block;
+  }
+
+  .recipe-climate-matrix .climate-matrix-header span,
+  .recipe-climate-matrix .climate-matrix-header strong,
+  .recipe-climate-matrix .climate-matrix-row span {
+    font-size: 0.72rem;
+  }
+
+  .recipe-climate-matrix .climate-matrix-row strong {
+    font-size: 0.82rem;
+  }
+
+  .recipe-climate-matrix .climate-matrix-row strong:nth-child(2)::before,
+  .recipe-climate-matrix .climate-matrix-row strong:nth-child(3)::before {
+    content: none;
+  }
+}
+`;
+  fs.writeFileSync(cssPath, css);
+  console.log("Applied mobile climate table override.");
+} else {
+  console.log("Mobile climate table override already applied.");
 }
