@@ -47,6 +47,20 @@ function numberSetting(source: Record<string, unknown>, key: string): number | n
   return null;
 }
 
+function firstNumber(source: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numberSetting(source, key);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function firstNumberFrom(local: Record<string, unknown>, global: Record<string, unknown>, keys: string[]): number | null {
+  const localValue = firstNumber(local, keys);
+  if (localValue !== null) return localValue;
+  return firstNumber(global, keys);
+}
+
 function textSetting(source: Record<string, unknown>, key: string, fallback = "—") {
   const value = source[key];
   if (typeof value === "string" && value.trim()) return value;
@@ -212,8 +226,8 @@ export default function RecipeDashboard() {
     const recipeId = textSetting(meta, "recipe_id", configs.local_settings?.payload_recipe_id ?? "—");
     const configType = textSetting(local, "config_type", textSetting(global, "config_type", "—"));
     const units = textSetting(local, "units", textSetting(global, "units", "—"));
-    const dayLength = numberSetting(local, "pgm_day_length") ?? numberSetting(global, "day_length");
-    const dayStart = numberSetting(local, "day_start") ?? numberSetting(global, "day_start");
+    const dayLength = firstNumberFrom(local, global, ["pgm_day_length", "day_length"]);
+    const dayStart = firstNumberFrom(local, global, ["day_start"]);
 
     const climateTargets: TargetCard[] = [
       {
@@ -259,52 +273,70 @@ export default function RecipeDashboard() {
       },
     ];
 
-    const nurseryFlow = numberSetting(local, "pgm_nursery_dosing_flow_rate") ?? numberSetting(global, "dosing_flow_rate");
-    const cultivationFlow = numberSetting(local, "pgm_cultivation_dosing_flow_rate") ?? numberSetting(global, "dosing_flow_rate");
+    const nurseryFlow = firstNumberFrom(local, global, ["pgm_nursery_dosing_flow_rate", "nursery_dosing_flowrate_ml_per_min", "dosing_flow_rate"]);
+    const cultivationFlow = firstNumberFrom(local, global, ["pgm_cultivation_dosing_flow_rate", "cultivation_dosing_flowrate_ml_per_min", "dosing_flow_rate"]);
+
+    const nurseryEcA = firstNumberFrom(local, global, ["nursery_ec_a_dose_length_three_part", "pgm_nursery_ec_a_dose_length", "nursery_ec_a_dose_length"]);
+    const nurseryEcB = firstNumberFrom(local, global, ["nursery_ec_b_dose_length_three_part", "pgm_nursery_ec_b_dose_length", "nursery_ec_b_dose_length"]);
+    const nurseryEcC = firstNumberFrom(local, global, ["nursery_ec_c_dose_length_three_part", "pgm_nursery_ec_c_dose_length", "nursery_ec_c_dose_length"]);
+    const nurseryPhDown = firstNumberFrom(local, global, ["pgm_nursery_ph_down_dose_length", "nursery_ph_down_dose_length"]);
+    const nurseryPhUp = firstNumberFrom(local, global, ["pgm_nursery_ph_up_dose_length", "nursery_ph_up_dose_length"]);
+
+    const cultivationEcA = firstNumberFrom(local, global, ["cultivation_ec_a_dose_length_three_part", "pgm_cultivation_ec_a_dose_length", "cultivation_ec_a_dose_length"]);
+    const cultivationEcB = firstNumberFrom(local, global, ["cultivation_ec_b_dose_length_three_part", "pgm_cultivation_ec_b_dose_length", "cultivation_ec_b_dose_length"]);
+    const cultivationEcC = firstNumberFrom(local, global, ["cultivation_ec_c_dose_length_three_part", "pgm_cultivation_ec_c_dose_length", "cultivation_ec_c_dose_length"]);
+    const cultivationPhDown = firstNumberFrom(local, global, ["pgm_cultivation_ph_down_dose_length", "cultivation_ph_down_dose_length"]);
+    const cultivationPhUp = firstNumberFrom(local, global, ["pgm_cultivation_ph_up_dose_length", "cultivation_ph_up_dose_length"]);
 
     const nurseryTiming: TimingCard[] = [
-      { label: "Water cycle", value: formatSeconds(numberSetting(local, "pgm_nursery_water_cycle_length")) },
-      { label: "Top water length", value: formatSeconds(numberSetting(local, "pgm_nursery_top_water_length")) },
-      { label: "Bottom water length", value: formatSeconds(numberSetting(local, "pgm_nursery_bottom_water_length")) },
-      { label: "Water offset", value: formatSeconds(numberSetting(local, "pgm_nursery_water_offset")) },
-      { label: "Recirculation", value: enabled(numberSetting(local, "pgm_nursery_recirculation_enable")) },
-      { label: "Autodose", value: enabled(numberSetting(local, "pgm_nursery_autodose_enable")) },
+      { label: "Water cycle", value: formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_water_cycle_length", "pgm_nursery_cycle_length", "nursery_cycle_length"])) },
+      { label: "Top water length", value: formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_water_length", "nursery_top_water_length"])) },
+      { label: "Bottom water length", value: formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_water_length", "nursery_bottom_water_length"])) },
+      { label: "Water offset", value: formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_water_offset", "nursery_water_offset"])) },
+      { label: "Top water", value: enabled(firstNumberFrom(local, global, ["nursery_top_water_enable", "pgm_nursery_top_water_enable"])) },
+      { label: "Bottom water", value: enabled(firstNumberFrom(local, global, ["nursery_bottom_water_enable", "pgm_nursery_bottom_water_enable"])) },
+      { label: "Recirculation", value: enabled(firstNumberFrom(local, global, ["nursery_recirc_enable", "pgm_nursery_recirculation_enable", "nursery_recirculation_enable"])) },
+      { label: "EC autodose", value: enabled(firstNumberFrom(local, global, ["nursery_autodose_enable_ec", "pgm_nursery_autodose_enable_ec"])) },
+      { label: "pH autodose", value: enabled(firstNumberFrom(local, global, ["nursery_autodose_enable_ph", "pgm_nursery_autodose_enable_ph"])) },
     ];
 
     const cultivationTiming: TimingCard[] = [
-      { label: "Water cycle", value: formatSeconds(numberSetting(local, "pgm_cultivation_water_cycle_length")) },
-      { label: "Left water length", value: formatSeconds(numberSetting(local, "pgm_cultivation_left_water_length")) },
-      { label: "Right water length", value: formatSeconds(numberSetting(local, "pgm_cultivation_right_water_length")) },
-      { label: "Water offset", value: formatSeconds(numberSetting(local, "pgm_cultivation_water_offset")) },
-      { label: "Recirculation", value: enabled(numberSetting(local, "pgm_cultivation_recirculation_enable")) },
-      { label: "Autodose", value: enabled(numberSetting(local, "pgm_cultivation_autodose_enable")) },
+      { label: "Water cycle", value: formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_water_cycle_length", "pgm_cultivation_cycle_length", "cultivation_cycle_length"])) },
+      { label: "Left water length", value: formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_water_length", "cultivation_left_water_length"])) },
+      { label: "Right water length", value: formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_water_length", "cultivation_right_water_length"])) },
+      { label: "Water offset", value: formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_water_offset", "cultivation_water_offset"])) },
+      { label: "Left water", value: enabled(firstNumberFrom(local, global, ["cultivation_left_water_enable", "pgm_cultivation_left_water_enable"])) },
+      { label: "Right water", value: enabled(firstNumberFrom(local, global, ["cultivation_right_water_enable", "pgm_cultivation_right_water_enable"])) },
+      { label: "Recirculation", value: enabled(firstNumberFrom(local, global, ["cultivation_recirc_enable", "pgm_cultivation_recirculation_enable", "cultivation_recirculation_enable"])) },
+      { label: "EC autodose", value: enabled(firstNumberFrom(local, global, ["cultivation_autodose_enable_ec", "pgm_cultivation_autodose_enable_ec"])) },
+      { label: "pH autodose", value: enabled(firstNumberFrom(local, global, ["cultivation_autodose_enable_ph", "pgm_cultivation_autodose_enable_ph"])) },
     ];
 
     const nurseryDosing: TimingCard[] = [
-      { label: "Nutrient A dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ec_a_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ec_a_dose_length"), nurseryFlow) },
-      { label: "Nutrient B dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ec_b_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ec_b_dose_length"), nurseryFlow) },
-      { label: "Nutrient C dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ec_c_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ec_c_dose_length"), nurseryFlow) },
-      { label: "pH Down dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ph_down_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ph_down_dose_length"), nurseryFlow) },
-      { label: "pH Up dose", value: formatSeconds(numberSetting(local, "pgm_nursery_ph_up_dose_length")), helper: doseVolume(numberSetting(local, "pgm_nursery_ph_up_dose_length"), nurseryFlow) },
+      { label: "Nutrient A dose", value: formatSeconds(nurseryEcA), helper: doseVolume(nurseryEcA, nurseryFlow) },
+      { label: "Nutrient B dose", value: formatSeconds(nurseryEcB), helper: doseVolume(nurseryEcB, nurseryFlow) },
+      { label: "Nutrient C dose", value: formatSeconds(nurseryEcC), helper: doseVolume(nurseryEcC, nurseryFlow) },
+      { label: "pH Down dose", value: formatSeconds(nurseryPhDown), helper: doseVolume(nurseryPhDown, nurseryFlow) },
+      { label: "pH Up dose", value: formatSeconds(nurseryPhUp), helper: doseVolume(nurseryPhUp, nurseryFlow) },
       { label: "Flow rate", value: formatNumber(nurseryFlow, "mL/min") },
     ];
 
     const cultivationDosing: TimingCard[] = [
-      { label: "Nutrient A dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ec_a_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ec_a_dose_length"), cultivationFlow) },
-      { label: "Nutrient B dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ec_b_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ec_b_dose_length"), cultivationFlow) },
-      { label: "Nutrient C dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ec_c_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ec_c_dose_length"), cultivationFlow) },
-      { label: "pH Down dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ph_down_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ph_down_dose_length"), cultivationFlow) },
-      { label: "pH Up dose", value: formatSeconds(numberSetting(local, "pgm_cultivation_ph_up_dose_length")), helper: doseVolume(numberSetting(local, "pgm_cultivation_ph_up_dose_length"), cultivationFlow) },
+      { label: "Nutrient A dose", value: formatSeconds(cultivationEcA), helper: doseVolume(cultivationEcA, cultivationFlow) },
+      { label: "Nutrient B dose", value: formatSeconds(cultivationEcB), helper: doseVolume(cultivationEcB, cultivationFlow) },
+      { label: "Nutrient C dose", value: formatSeconds(cultivationEcC), helper: doseVolume(cultivationEcC, cultivationFlow) },
+      { label: "pH Down dose", value: formatSeconds(cultivationPhDown), helper: doseVolume(cultivationPhDown, cultivationFlow) },
+      { label: "pH Up dose", value: formatSeconds(cultivationPhUp), helper: doseVolume(cultivationPhUp, cultivationFlow) },
       { label: "Flow rate", value: formatNumber(cultivationFlow, "mL/min") },
     ];
 
     const lighting: TimingCard[] = [
       { label: "Day length", value: formatSeconds(dayLength) },
       { label: "Day start", value: formatSeconds(dayStart), helper: "seconds from controller midnight" },
-      { label: "Nursery top red", value: `${formatSeconds(numberSetting(local, "pgm_nursery_top_red_light_on_delay"))} → ${formatSeconds(numberSetting(local, "pgm_nursery_top_red_light_off_delay"))}` },
-      { label: "Nursery bottom red", value: `${formatSeconds(numberSetting(local, "pgm_nursery_bottom_red_light_on_delay"))} → ${formatSeconds(numberSetting(local, "pgm_nursery_bottom_red_light_off_delay"))}` },
-      { label: "Cultivation left red", value: `${formatSeconds(numberSetting(local, "pgm_cultivation_left_red_light_on_delay"))} → ${formatSeconds(numberSetting(local, "pgm_cultivation_left_red_light_off_delay"))}` },
-      { label: "Cultivation right red", value: `${formatSeconds(numberSetting(local, "pgm_cultivation_right_red_light_on_delay"))} → ${formatSeconds(numberSetting(local, "pgm_cultivation_right_red_light_off_delay"))}` },
+      { label: "Nursery top red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_red_light_on_delay", "pgm_nursery_top_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_top_red_light_off_delay", "pgm_nursery_top_red_off_delay"]))}` },
+      { label: "Nursery bottom red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_on_delay", "pgm_nursery_bottom_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_nursery_bottom_red_light_off_delay", "pgm_nursery_bottom_red_off_delay"]))}` },
+      { label: "Cultivation left red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_on_delay", "pgm_cultivation_left_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_left_red_light_off_delay", "pgm_cultivation_left_red_off_delay"]))}` },
+      { label: "Cultivation right red", value: `${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_on_delay", "pgm_cultivation_right_red_on_delay"]))} → ${formatSeconds(firstNumberFrom(local, global, ["pgm_cultivation_right_red_light_off_delay", "pgm_cultivation_right_red_off_delay"]))}` },
     ];
 
     return {
