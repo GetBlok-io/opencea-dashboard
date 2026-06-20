@@ -49,6 +49,19 @@ if (!recipe.includes('timeZone: process.env.NEXT_PUBLIC_FARM_TIME_ZONE ?? "Ameri
   console.log("Recipe clock formatting already patched.");
 }
 
+recipe = fs.readFileSync(recipePath, "utf8");
+const zoneTargetGrid = '{targets && targets.length > 0 ? <TargetGrid cards={targets} /> : null}';
+const zoneTargetTable = '{targets && targets.length > 0 ? <ClimateMatrix cards={targets} /> : null}';
+if (recipe.includes(zoneTargetGrid)) {
+  recipe = recipe.replace(zoneTargetGrid, zoneTargetTable);
+  fs.writeFileSync(recipePath, recipe);
+  console.log("Patched zone target sections to use day/night tables.");
+} else if (recipe.includes(zoneTargetTable)) {
+  console.log("Zone target sections already use day/night tables.");
+} else {
+  console.log("Zone target section pattern not found; leaving unchanged.");
+}
+
 const cssPath = path.join(__dirname, "..", "app", "globals.css");
 let css = fs.readFileSync(cssPath, "utf8");
 const marker = "/* OpenCEA compact container recipe */";
@@ -112,6 +125,10 @@ ${marker}
   color: var(--text);
   font-size: 1.05rem;
   line-height: 1.2;
+}
+
+.recipe-zone-panel > .recipe-climate-matrix {
+  margin-top: 12px;
 }
 
 .recipe-timing-grid-compact {
