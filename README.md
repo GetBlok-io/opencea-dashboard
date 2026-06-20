@@ -1,6 +1,6 @@
-# farmhand-dashboard
+# opencea-dashboard
 
-Next.js dashboard for Farmhand reported state telemetry.
+Next.js dashboard for reported state telemetry from CEA container farms, designed around Freight Farms container deployments while remaining open-source and brand-neutral in naming.
 
 The app reads the latest connected module snapshots from PostgreSQL table `reported_state`, enriches each mapped IO value with friendly names from `module_list`, and displays the farm by operational zone:
 

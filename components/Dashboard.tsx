@@ -455,10 +455,10 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
     <main className="page-shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">Farmhand Dashboard</p>
+          <p className="eyebrow">OpenCEA Dashboard</p>
           <h1>Farm zone telemetry</h1>
           <p className="hero-copy">
-            Live view of connected Farmhand modules, grouped by Container, Nursery, and Cultivation using the module_list mapping.
+            Live view of connected CEA container modules, grouped by Container, Nursery, and Cultivation using the module_list mapping.
           </p>
         </div>
         <div className="hero-actions">
