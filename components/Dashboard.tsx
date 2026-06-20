@@ -272,6 +272,20 @@ function valueClass(metric: Metric) {
   return undefined;
 }
 
+function isSwitchMetric(metric: Metric) {
+  return (
+    typeof metric.value === "number" &&
+    (isPumpMetric(metric) || isOutputMetric(metric)) &&
+    !isContainerNutrientLevelMetric(metric) &&
+    !isTroughLevelMetric(metric)
+  );
+}
+
+function isChartedMetric(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  return CHARTS.some((chart) => chart.aliasKey === alias);
+}
+
 function formatDate(value: string | null) {
   if (!value) return "No timestamp";
 
@@ -394,7 +408,29 @@ function getChartData(history: HistoryPoint[], chart: ChartDefinition, temperatu
     }));
 }
 
+function ToggleMetricCard({ metric }: { metric: Metric }) {
+  const enabled = Number(metric.value) === 1;
+
+  return (
+    <div className="metric switch-metric" key={metric.id}>
+      <div>
+        <span>{metric.label}</span>
+        <small className="module-id">{metric.deviceId} · {metric.key}</small>
+      </div>
+      <div className="switch-wrap" aria-label={`${metric.label} is ${enabled ? "ON" : "OFF"}`}>
+        <span className={enabled ? "switch-label" : "switch-label active-label"}>OFF</span>
+        <span className={enabled ? "switch on" : "switch"}>
+          <span className="switch-thumb" />
+        </span>
+        <span className={enabled ? "switch-label active-label" : "switch-label"}>ON</span>
+      </div>
+    </div>
+  );
+}
+
 function MetricCard({ metric, temperatureUnit }: { metric: Metric; temperatureUnit: TemperatureUnit }) {
+  if (isSwitchMetric(metric)) return <ToggleMetricCard metric={metric} />;
+
   return (
     <div className="metric" key={metric.id}>
       <span>{metric.label}</span>
@@ -422,7 +458,6 @@ function ChartCard({
     <article className="chart-card">
       <div className="chart-card-header">
         <div>
-          <p className="zone-kicker">{chart.zone}</p>
           <h3>{chart.title}</h3>
           <span>{chart.subtitle}</span>
         </div>
@@ -457,30 +492,6 @@ function ChartCard({
         )}
       </div>
     </article>
-  );
-}
-
-function ChartGrid({
-  zoneGroups,
-  history,
-  temperatureUnit,
-}: {
-  zoneGroups: ZoneGroup[];
-  history: HistoryPoint[];
-  temperatureUnit: TemperatureUnit;
-}) {
-  return (
-    <section className="chart-grid">
-      {CHARTS.map((chart) => (
-        <ChartCard
-          key={chart.aliasKey}
-          chart={chart}
-          history={history}
-          currentValue={getLatestMetricValue(zoneGroups, chart.aliasKey)}
-          temperatureUnit={temperatureUnit}
-        />
-      ))}
-    </section>
   );
 }
 
@@ -529,21 +540,31 @@ function ZoneMetricRow({
   );
 }
 
-function ZoneCard({ group, temperatureUnit }: { group: ZoneGroup; temperatureUnit: TemperatureUnit }) {
+function ZoneMonitoringSection({
+  group,
+  history,
+  temperatureUnit,
+}: {
+  group: ZoneGroup;
+  history: HistoryPoint[];
+  temperatureUnit: TemperatureUnit;
+}) {
   const latestUpdate = group.metrics
     .map((metric) => metric.updatedAt)
     .filter((value): value is string => Boolean(value))
     .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
 
-  const primary = group.metrics.filter((metric) => getMetricRow(metric) === "primary").sort(sortMetrics);
-  const secondary = group.metrics.filter((metric) => getMetricRow(metric) === "secondary").sort(sortMetrics);
-  const other = group.metrics.filter((metric) => getMetricRow(metric) === "other").sort(sortMetrics);
+  const zoneCharts = CHARTS.filter((chart) => chart.zone === group.zone);
+  const nonChartMetrics = group.metrics.filter((metric) => !isChartedMetric(metric));
+  const primary = nonChartMetrics.filter((metric) => getMetricRow(metric) === "primary").sort(sortMetrics);
+  const secondary = nonChartMetrics.filter((metric) => getMetricRow(metric) === "secondary").sort(sortMetrics);
+  const other = nonChartMetrics.filter((metric) => getMetricRow(metric) === "other").sort(sortMetrics);
 
   return (
-    <article className="zone-card">
+    <article className="monitoring-zone-panel">
       <div className="zone-card-header">
         <div>
-          <p className="zone-kicker">Zone</p>
+          <p className="zone-kicker">Monitoring</p>
           <h2>{group.zone}</h2>
         </div>
         <span className="metric-count">{group.metrics.length} values</span>
@@ -551,15 +572,31 @@ function ZoneCard({ group, temperatureUnit }: { group: ZoneGroup; temperatureUni
 
       <p className="timestamp">Updated: {formatDate(latestUpdate)}</p>
 
-      {group.metrics.length > 0 ? (
+      {zoneCharts.length > 0 ? (
+        <section className="zone-chart-grid">
+          {zoneCharts.map((chart) => (
+            <ChartCard
+              key={chart.aliasKey}
+              chart={chart}
+              history={history}
+              currentValue={getLatestMetricValue([group], chart.aliasKey)}
+              temperatureUnit={temperatureUnit}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {nonChartMetrics.length > 0 ? (
         <div className="zone-row-stack">
           <ZoneMetricRow zone={group.zone} row="primary" metrics={primary} temperatureUnit={temperatureUnit} />
           <ZoneMetricRow zone={group.zone} row="secondary" metrics={secondary} temperatureUnit={temperatureUnit} />
           <ZoneMetricRow zone={group.zone} row="other" metrics={other} temperatureUnit={temperatureUnit} />
         </div>
-      ) : (
+      ) : null}
+
+      {group.metrics.length === 0 ? (
         <div className="empty-zone">No connected mapped values found for this zone.</div>
-      )}
+      ) : null}
     </article>
   );
 }
@@ -719,14 +756,16 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
       {error ? <div className="error-box">{error}</div> : null}
 
       {activeSection === "monitoring" ? (
-        <>
-          <ChartGrid zoneGroups={zoneGroups} history={history} temperatureUnit={temperatureUnit} />
-          <section className="zone-grid">
-            {zoneGroups.map((group) => (
-              <ZoneCard key={group.zone} group={group} temperatureUnit={temperatureUnit} />
-            ))}
-          </section>
-        </>
+        <section className="monitoring-zone-stack">
+          {zoneGroups.map((group) => (
+            <ZoneMonitoringSection
+              key={group.zone}
+              group={group}
+              history={history}
+              temperatureUnit={temperatureUnit}
+            />
+          ))}
+        </section>
       ) : null}
 
       {activeSection === "control" ? <ControlFoundation /> : null}

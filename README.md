@@ -62,3 +62,13 @@ The dashboard still expects:
 - `module_list`
 
 The historical chart cards use the existing `reported_state` table and will become more useful as repeated scraper snapshots accumulate.
+
+## Monitoring layout update
+
+The Monitoring section is organized by operational zone:
+
+- Container
+- Nursery
+- Cultivation
+
+Each zone panel consolidates trend charts and current mapped status values in one place. Charted metrics such as temperature, humidity, CO2, pH, EC, and tank depth are not duplicated as standalone value cards. Output and pump states are rendered as read-only ON/OFF switch indicators until explicit control execution is designed.
