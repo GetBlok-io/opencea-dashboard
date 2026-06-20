@@ -130,20 +130,6 @@ function ClimateMatrix({ cards }: { cards: TargetCard[] }) {
   );
 }
 
-function TimingGrid({ cards }: { cards: TimingCard[] }) {
-  return (
-    <div className="recipe-timing-grid">
-      {cards.map((card) => (
-        <article className="recipe-timing-card" key={card.label}>
-          <span>{card.label}</span>
-          <strong>{card.value}</strong>
-          {card.helper ? <small>{card.helper}</small> : null}
-        </article>
-      ))}
-    </div>
-  );
-}
-
 function CultivationMetricCard({ card, status = false }: { card: TimingCard; status?: boolean }) {
   return (
     <article className="recipe-trough-metric">
@@ -210,49 +196,6 @@ function CultivationLightCard({
   );
 }
 
-function CultivationLayoutMap({
-  timing,
-  lighting,
-}: {
-  timing: TimingCard[];
-  lighting: CultivationLighting;
-}) {
-  return (
-    <section className="cultivation-layout-map" aria-label="Cultivation row configuration">
-      <div className="cultivation-layout-header">
-        <div>
-          <p className="zone-kicker">Grow row layout</p>
-          <h3>Greenery S cultivation rows</h3>
-        </div>
-        <span>Dual-zone lighting and irrigation</span>
-      </div>
-
-      <div className="cultivation-row-grid">
-        {CULTIVATION_ROWS.map((row) => {
-          const cards = sideCards(row.side, timing);
-          const redDuration = durationSeconds(lighting[row.side].red.onDelay, lighting[row.side].red.offDelay);
-          const blueDuration = durationSeconds(lighting[row.side].blue.onDelay, lighting[row.side].blue.offDelay);
-          return (
-            <article className={`cultivation-row-card ${row.side}`} key={row.code}>
-              <div className="cultivation-row-code">{row.code}</div>
-              <div>
-                <h4>{row.label}</h4>
-                <p>{sideTitle(row.side)} settings</p>
-              </div>
-              <div className="cultivation-row-facts">
-                <span>Irrigation <strong>{cards.waterLength.value}</strong></span>
-                <span>Red <strong>{formatDuration(redDuration)}</strong></span>
-                <span>Blue <strong>{formatDuration(blueDuration)}</strong></span>
-              </div>
-              <StatusPill value={cards.waterEnable.value} />
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 function CultivationLightingSection({ lighting, dayStart }: { lighting: CultivationLighting; dayStart: number | null }) {
   return (
     <div className="recipe-zone-subsection">
@@ -275,28 +218,44 @@ function CultivationLightingSection({ lighting, dayStart }: { lighting: Cultivat
   );
 }
 
-function CultivationIrrigationSection({ timing }: { timing: TimingCard[] }) {
-  const left = sideCards("left", timing);
-  const right = sideCards("right", timing);
+function CultivationIrrigationRows({ timing }: { timing: TimingCard[] }) {
   const waterCycle = findCard(timing, "Water cycle");
   const waterOffset = findCard(timing, "Water offset");
   const recirculation = findCard(timing, "Recirculation");
 
   return (
-    <div className="recipe-zone-subsection">
-      <h3 className="recipe-subtitle">Irrigation schedule</h3>
-      <div className="recipe-trough-grid cultivation-schedule-grid">
-        <CultivationMetricCard card={left.waterLength} />
-        <CultivationMetricCard card={left.waterEnable} status />
-        <CultivationMetricCard card={left.water24h} status />
-        <CultivationMetricCard card={right.waterLength} />
-        <CultivationMetricCard card={right.waterEnable} status />
-        <CultivationMetricCard card={right.water24h} status />
-        <CultivationMetricCard card={waterCycle} />
-        <CultivationMetricCard card={waterOffset} />
-        <CultivationMetricCard card={recirculation} status />
+    <section className="cultivation-layout-map" aria-label="Cultivation irrigation schedule">
+      <div className="cultivation-layout-header">
+        <div>
+          <p className="zone-kicker">Irrigation schedule</p>
+          <h3>Row irrigation settings</h3>
+        </div>
+        <span>Per-row water recipe</span>
       </div>
-    </div>
+
+      <div className="cultivation-row-grid">
+        {CULTIVATION_ROWS.map((row) => {
+          const cards = sideCards(row.side, timing);
+          return (
+            <article className={`cultivation-row-card ${row.side}`} key={row.code}>
+              <div className="cultivation-row-code">{row.code}</div>
+              <div>
+                <h4>{row.label}</h4>
+                <p>{sideTitle(row.side)} irrigation settings</p>
+              </div>
+              <div className="cultivation-row-facts cultivation-row-facts-irrigation">
+                <span>Duration <strong>{cards.waterLength.value}</strong></span>
+                <span>Enabled <StatusPill value={cards.waterEnable.value} /></span>
+                <span>24h Water <StatusPill value={cards.water24h.value} /></span>
+                <span>Water Cycle <strong>{waterCycle.value}</strong></span>
+                <span>Side Offset <strong>{waterOffset.value}</strong></span>
+                <span>Recirculation <StatusPill value={recirculation.value} /></span>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -340,9 +299,8 @@ export default function CultivationRecipeGroups({
       </div>
 
       <ClimateMatrix cards={targets} />
-      <CultivationLayoutMap timing={timing} lighting={lighting} />
       <CultivationLightingSection lighting={lighting} dayStart={dayStart} />
-      <CultivationIrrigationSection timing={timing} />
+      <CultivationIrrigationRows timing={timing} />
       <CultivationDosingSection timing={timing} dosing={dosing} />
     </section>
   );
