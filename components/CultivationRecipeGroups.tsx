@@ -36,6 +36,10 @@ function findCard(cards: TimingCard[], label: string): TimingCard {
   return cards.find((card) => card.label === label) ?? { label, value: "-" };
 }
 
+function relabelCard(card: TimingCard, label: string): TimingCard {
+  return { ...card, label };
+}
+
 function formatClock(dayStart: number | null, delay: number | null) {
   if (dayStart === null || delay === null) return "-";
   const seconds = ((Math.round(dayStart + delay) % 86400) + 86400) % 86400;
@@ -214,16 +218,19 @@ function CultivationLightingSection({ lighting, dayStart }: { lighting: Cultivat
 function CultivationIrrigationRows({ timing }: { timing: TimingCard[] }) {
   const waterCycle = findCard(timing, "Water cycle");
   const waterOffset = findCard(timing, "Water offset");
-  const recirculation = findCard(timing, "Recirculation");
+  const recirculation = relabelCard(findCard(timing, "Recirculation"), "Shared recirculation");
 
   return (
     <section className="cultivation-layout-map" aria-label="Cultivation irrigation schedule">
       <div className="cultivation-layout-header">
         <div>
           <p className="zone-kicker">Irrigation schedule</p>
-          <h3>Side irrigation settings</h3>
         </div>
         <span>L/LM and RM/R</span>
+      </div>
+
+      <div className="recipe-trough-grid cultivation-shared-irrigation-grid">
+        <CultivationMetricCard card={recirculation} status />
       </div>
 
       <div className="cultivation-row-grid cultivation-side-irrigation-grid">
@@ -242,7 +249,6 @@ function CultivationIrrigationRows({ timing }: { timing: TimingCard[] }) {
                 <span>24h Water <StatusPill value={cards.water24h.value} /></span>
                 <span>Water Cycle <strong>{waterCycle.value}</strong></span>
                 <span>Side Offset <strong>{waterOffset.value}</strong></span>
-                <span>Recirculation <StatusPill value={recirculation.value} /></span>
               </div>
             </article>
           );
@@ -253,18 +259,29 @@ function CultivationIrrigationRows({ timing }: { timing: TimingCard[] }) {
 }
 
 function CultivationDosingSection({ timing, dosing }: { timing: TimingCard[]; dosing: TimingCard[] }) {
-  const ecAutodose = findCard(timing, "EC autodose");
-  const phAutodose = findCard(timing, "pH autodose");
+  const ecAutodose = relabelCard(findCard(timing, "EC autodose"), "EC autodose");
+  const phAutodose = relabelCard(findCard(timing, "pH autodose"), "pH autodose");
+  const nutrientA = findCard(dosing, "Nutrient A dose");
+  const nutrientB = findCard(dosing, "Nutrient B dose");
+  const nutrientC = findCard(dosing, "Nutrient C dose");
+  const phDown = findCard(dosing, "pH Down dose");
+  const phUp = findCard(dosing, "pH Up dose");
+  const flowRate = findCard(dosing, "Flow rate");
 
   return (
-    <div className="recipe-zone-subsection">
+    <div className="recipe-zone-subsection cultivation-dosing-section">
       <h3 className="recipe-subtitle">Dosing schedule</h3>
-      <div className="recipe-trough-grid cultivation-dosing-grid compact-dosing-grid">
+      <div className="recipe-trough-grid compact-dosing-grid cultivation-dosing-row cultivation-ec-dosing-row">
         <CultivationMetricCard card={ecAutodose} status />
+        <CultivationMetricCard card={nutrientA} />
+        <CultivationMetricCard card={nutrientB} />
+        <CultivationMetricCard card={nutrientC} />
+      </div>
+      <div className="recipe-trough-grid compact-dosing-grid cultivation-dosing-row cultivation-ph-dosing-row">
         <CultivationMetricCard card={phAutodose} status />
-        {dosing.map((card) => (
-          <CultivationMetricCard key={card.label} card={card} />
-        ))}
+        <CultivationMetricCard card={phDown} />
+        <CultivationMetricCard card={phUp} />
+        <CultivationMetricCard card={flowRate} />
       </div>
     </div>
   );
