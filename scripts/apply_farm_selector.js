@@ -81,6 +81,13 @@ dashboard = replaceOnce(
 
 dashboard = replaceOnce(
   dashboard,
+  `          <button onClick={refresh} disabled={loading} type="button">`,
+  `          <button onClick={() => refresh(selectedControllerId)} disabled={loading} type="button">`,
+  "dashboard refresh button handler"
+);
+
+dashboard = replaceOnce(
+  dashboard,
   `      {activeSection === "control" ? <ControlFoundation zoneGroups={zoneGroups} /> : null}\n      {activeSection === "recipe" ? <RecipeFoundation temperatureUnit={temperatureUnit} /> : null}`,
   `      {activeSection === "control" ? <ControlFoundation zoneGroups={zoneGroups} /> : null}\n      {activeSection === "recipe" ? <RecipeFoundation temperatureUnit={temperatureUnit} controllerId={selectedControllerId} /> : null}`,
   "dashboard recipe selected farm render"
