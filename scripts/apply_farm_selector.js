@@ -68,7 +68,7 @@ dashboard = replaceOnce(
 dashboard = replaceOnce(
   dashboard,
   `  const summary = useMemo(() => {`,
-  `  const selectedFarm = useMemo(() => {\n    return farmOptions.find((farm) => farm.controller_id === selectedControllerId) ?? null;\n  }, [farmOptions, selectedControllerId]);\n\n  const farmName = selectedFarm?.farm_name ?? selectedControllerId ?? process.env.NEXT_PUBLIC_FARM_NAME ?? "OpenCEA Farm";\n\n  function handleFarmChange(nextControllerId: string) {\n    setSelectedControllerId(nextControllerId || null);\n    const nextUrl = nextControllerId ? \`/?farm=\${encodeURIComponent(nextControllerId)}\` : "/";\n    window.history.replaceState(null, "", nextUrl);\n    refresh(nextControllerId || null);\n  }\n\n  const summary = useMemo(() => {`,
+  `  const selectedFarm = useMemo(() => {\n    return farmOptions.find((farm) => farm.controller_id === selectedControllerId) ?? null;\n  }, [farmOptions, selectedControllerId]);\n\n  const farmName = selectedFarm?.farm_name ?? selectedFarm?.label ?? selectedControllerId ?? "Select a farm";\n\n  function handleFarmChange(nextControllerId: string) {\n    setSelectedControllerId(nextControllerId || null);\n    const nextUrl = nextControllerId ? \`/?farm=\${encodeURIComponent(nextControllerId)}\` : "/";\n    window.history.replaceState(null, "", nextUrl);\n    refresh(nextControllerId || null);\n  }\n\n  const summary = useMemo(() => {`,
   "dashboard selected farm helpers"
 );
 
