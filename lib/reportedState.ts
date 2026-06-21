@@ -1,5 +1,5 @@
 import { pool } from "./db";
-import { FarmSelection, farmFilterSql } from "./farms";
+import { FarmSelection, reportedStateFarmFilterSql } from "./farms";
 
 export type ModuleListEntry = {
   alias_key: string;
@@ -17,6 +17,8 @@ export type ReportedStateRow = {
   id: number;
   source_url: string;
   scraped_at: string;
+  controller_id: string | null;
+  group_id: string | null;
   device_id: string;
   device_type: string;
   device_last_update_epoch: number | null;
@@ -30,12 +32,15 @@ export type ReportedStateRow = {
 };
 
 export async function getLatestReportedState(selection?: FarmSelection): Promise<ReportedStateRow[]> {
+  const farmFilter = await reportedStateFarmFilterSql("rs");
   const sql = `
     WITH latest AS (
       SELECT DISTINCT ON (rs.device_id)
         rs.id,
         rs.source_url,
         rs.scraped_at,
+        CASE WHEN to_jsonb(rs) ? 'controller_id' THEN to_jsonb(rs) ->> 'controller_id' ELSE NULL END AS controller_id,
+        CASE WHEN to_jsonb(rs) ? 'group_id' THEN to_jsonb(rs) ->> 'group_id' ELSE NULL END AS group_id,
         rs.device_id,
         rs.device_type,
         rs.device_last_update_epoch,
@@ -46,7 +51,7 @@ export async function getLatestReportedState(selection?: FarmSelection): Promise
         rs.shadow
       FROM reported_state rs
       WHERE TRUE
-        ${farmFilterSql("rs")}
+        ${farmFilter}
       ORDER BY
         rs.device_id,
         (rs.connected IS TRUE) DESC,
@@ -57,6 +62,8 @@ export async function getLatestReportedState(selection?: FarmSelection): Promise
       latest.id,
       latest.source_url,
       latest.scraped_at,
+      latest.controller_id,
+      latest.group_id,
       latest.device_id,
       latest.device_type,
       latest.device_last_update_epoch,
@@ -103,6 +110,8 @@ export async function getLatestReportedState(selection?: FarmSelection): Promise
       latest.id,
       latest.source_url,
       latest.scraped_at,
+      latest.controller_id,
+      latest.group_id,
       latest.device_id,
       latest.device_type,
       latest.device_last_update_epoch,
