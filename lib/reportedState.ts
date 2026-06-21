@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import { FarmSelection, farmFilterSql } from "./farms";
 
 export type ModuleListEntry = {
   alias_key: string;
@@ -28,27 +29,29 @@ export type ReportedStateRow = {
   module_mappings: ModuleListEntry[];
 };
 
-export async function getLatestReportedState(): Promise<ReportedStateRow[]> {
+export async function getLatestReportedState(selection?: FarmSelection): Promise<ReportedStateRow[]> {
   const sql = `
     WITH latest AS (
-      SELECT DISTINCT ON (device_id)
-        id,
-        source_url,
-        scraped_at,
-        device_id,
-        device_type,
-        device_last_update_epoch,
-        device_last_update_at,
-        connected,
-        state,
-        mode,
-        shadow
-      FROM reported_state
+      SELECT DISTINCT ON (rs.device_id)
+        rs.id,
+        rs.source_url,
+        rs.scraped_at,
+        rs.device_id,
+        rs.device_type,
+        rs.device_last_update_epoch,
+        rs.device_last_update_at,
+        rs.connected,
+        rs.state,
+        rs.mode,
+        rs.shadow
+      FROM reported_state rs
+      WHERE TRUE
+        ${farmFilterSql("rs")}
       ORDER BY
-        device_id,
-        (connected IS TRUE) DESC,
-        device_last_update_at DESC NULLS LAST,
-        scraped_at DESC
+        rs.device_id,
+        (rs.connected IS TRUE) DESC,
+        rs.device_last_update_at DESC NULLS LAST,
+        rs.scraped_at DESC
     )
     SELECT
       latest.id,
@@ -112,6 +115,6 @@ export async function getLatestReportedState(): Promise<ReportedStateRow[]> {
     ORDER BY latest.device_id;
   `;
 
-  const result = await pool.query(sql);
+  const result = await pool.query(sql, [selection?.controllerId ?? null, selection?.groupId ?? null]);
   return result.rows;
 }
