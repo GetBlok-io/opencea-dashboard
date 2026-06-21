@@ -5,6 +5,7 @@ OpenCEA Dashboard is an open-source visibility dashboard for CEA container farms
 ## Current scope
 
 - Monitoring dashboard backed by `reported_state` and `module_list`
+- Farm selector backed by stable controller/group identifiers
 - Zone grouping for Container, Nursery, and Cultivation
 - Celsius/Fahrenheit temperature toggle
 - Visual trend cards for temperature, humidity, CO2, pH, EC, and tank depth using Recharts
@@ -26,8 +27,22 @@ Open `http://localhost:3000`.
 ```env
 DATABASE_URL=postgresql://user:password@host:5432/database
 NEXT_PUBLIC_REFRESH_SECONDS=30
-NEXT_PUBLIC_FARM_NAME=PeaPod-1
 ```
+
+## Farm registry and reported-state identity
+
+For multi-farm support, telemetry rows should carry stable farm identity columns:
+
+- `reported_state.controller_id`
+- `reported_state.group_id`
+
+Apply the reported-state identity migration:
+
+```bash
+psql "$DATABASE_URL" -f db/reported_state_farm_identity.sql
+```
+
+The dashboard query layer will use these indexed columns when they exist. If the migration has not been applied yet, it falls back to the legacy `source_url` / `raw_record` text-matching bridge so existing deployments can continue to render while the scraper is updated.
 
 ## Optional farm configuration registry
 
@@ -56,10 +71,12 @@ python scripts/import_farm_config.py
 
 ## Existing database dependencies
 
-The dashboard still expects:
+The dashboard expects:
 
 - `reported_state`
 - `module_list`
+
+The farm selector expects `farm_registry` from `db/farm_config_schema.sql`. Reported-state farm identity columns are recommended for multi-farm performance and clean tenancy filtering.
 
 The historical chart cards use the existing `reported_state` table and will become more useful as repeated scraper snapshots accumulate.
 
