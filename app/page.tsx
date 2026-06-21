@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 type SearchParams = Record<string, string | string[] | undefined>;
 
 type HomeProps = {
-  searchParams?: SearchParams | Promise<SearchParams>;
+  searchParams?: Promise<SearchParams>;
 };
 
 function firstParam(value: string | string[] | undefined) {
@@ -15,7 +15,7 @@ function firstParam(value: string | string[] | undefined) {
 }
 
 export default async function Home({ searchParams }: HomeProps) {
-  const params = await Promise.resolve(searchParams ?? {});
+  const params = searchParams ? await searchParams : {};
   const requestedControllerId = firstParam(params.controller_id) ?? firstParam(params.farm);
   const selection = await resolveFarmSelection(requestedControllerId);
   const [rows, farmOptions] = await Promise.all([
