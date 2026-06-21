@@ -14,6 +14,8 @@ export type FarmSelection = {
   groupId: string | null;
 };
 
+let reportedStateIdentityColumnsPromise: Promise<boolean> | null = null;
+
 function normalizeId(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -92,6 +94,25 @@ export async function resolveFarmSelection(controllerId?: string | null): Promis
   };
 }
 
+async function reportedStateHasFarmIdentityColumns() {
+  if (!reportedStateIdentityColumnsPromise) {
+    reportedStateIdentityColumnsPromise = pool
+      .query(
+        `
+          SELECT COUNT(*)::int AS column_count
+          FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'reported_state'
+            AND column_name IN ('controller_id', 'group_id');
+        `,
+      )
+      .then((result) => Number(result.rows[0]?.column_count ?? 0) === 2)
+      .catch(() => false);
+  }
+
+  return reportedStateIdentityColumnsPromise;
+}
+
 export function farmFilterSql(alias: string) {
   return `
     AND (
@@ -104,6 +125,25 @@ export function farmFilterSql(alias: string) {
           ${alias}.source_url ILIKE '%' || $2::text || '%'
           OR COALESCE(${alias}.raw_record::text, '') ILIKE '%' || $2::text || '%'
         )
+      )
+    )
+  `;
+}
+
+export async function reportedStateFarmFilterSql(alias: string) {
+  const hasIdentityColumns = await reportedStateHasFarmIdentityColumns();
+
+  if (!hasIdentityColumns) {
+    return farmFilterSql(alias);
+  }
+
+  return `
+    AND (
+      $1::uuid IS NULL
+      OR ${alias}.controller_id = $1::uuid
+      OR (
+        $2::uuid IS NOT NULL
+        AND ${alias}.group_id = $2::uuid
       )
     )
   `;
