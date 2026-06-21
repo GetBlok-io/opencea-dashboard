@@ -34,7 +34,9 @@ export async function listFarmOptions(): Promise<FarmOption[]> {
       fr.controller_id,
       fr.group_id,
       fr.farm_name,
-      fr.config_type
+      fr.config_type,
+      fr.updated_at,
+      fr.created_at
     ORDER BY
       COALESCE(MAX(fcs.captured_at), fr.updated_at, fr.created_at) DESC,
       fr.farm_name ASC;
