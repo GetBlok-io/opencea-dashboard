@@ -1,5 +1,5 @@
 import { pool } from "./db";
-import { FarmSelection, farmFilterSql } from "./farms";
+import { FarmSelection, reportedStateFarmFilterSql } from "./farms";
 
 export type HistoryMetricAlias =
   | "air_temperature"
@@ -22,6 +22,8 @@ export type ReportedStateHistoryPoint = {
   zone: string;
   io_key: string;
   module_id: string;
+  controller_id: string | null;
+  group_id: string | null;
   device_type: string;
   sampled_at: string;
   value: number;
@@ -46,6 +48,7 @@ const DEFAULT_ALIASES: HistoryMetricAlias[] = [
 export async function getReportedStateHistory(hours = 24, selection?: FarmSelection): Promise<ReportedStateHistoryPoint[]> {
   const safeHours = Number.isFinite(hours) ? Math.min(Math.max(hours, 1), 168) : 24;
   const maxSamplesPerAlias = 288;
+  const farmFilter = await reportedStateFarmFilterSql("rs");
 
   const sql = `
     WITH mapped_points AS (
@@ -55,6 +58,8 @@ export async function getReportedStateHistory(hours = 24, selection?: FarmSelect
         ml.zone,
         ml.io_key,
         rs.device_id AS module_id,
+        CASE WHEN to_jsonb(rs) ? 'controller_id' THEN to_jsonb(rs) ->> 'controller_id' ELSE NULL END AS controller_id,
+        CASE WHEN to_jsonb(rs) ? 'group_id' THEN to_jsonb(rs) ->> 'group_id' ELSE NULL END AS group_id,
         rs.device_type,
         COALESCE(rs.device_last_update_at, rs.scraped_at) AS sampled_at,
         (rs.state ->> ml.io_key)::double precision AS value
@@ -63,9 +68,9 @@ export async function getReportedStateHistory(hours = 24, selection?: FarmSelect
         ON ml.module_id = rs.device_id
         AND ml.io_key IS NOT NULL
       WHERE ml.alias_key = ANY($3::text[])
-        ${farmFilterSql("rs")}
+        ${farmFilter}
         AND rs.state ? ml.io_key
-        AND (rs.state ->> ml.io_key) ~ '^-?[0-9]+(\.[0-9]+)?$'
+        AND (rs.state ->> ml.io_key) ~ '^-?[0-9]+(\\.[0-9]+)?$'
     ),
     ranked_recent AS (
       SELECT
@@ -95,6 +100,8 @@ export async function getReportedStateHistory(hours = 24, selection?: FarmSelect
       zone,
       io_key,
       module_id,
+      controller_id,
+      group_id,
       device_type,
       sampled_at,
       value
