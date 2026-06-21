@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import { FarmSelection, farmFilterSql } from "./farms";
 
 export type HistoryMetricAlias =
   | "air_temperature"
@@ -42,7 +43,7 @@ const DEFAULT_ALIASES: HistoryMetricAlias[] = [
   "cultivation_right_send_pressure",
 ];
 
-export async function getReportedStateHistory(hours = 24): Promise<ReportedStateHistoryPoint[]> {
+export async function getReportedStateHistory(hours = 24, selection?: FarmSelection): Promise<ReportedStateHistoryPoint[]> {
   const safeHours = Number.isFinite(hours) ? Math.min(Math.max(hours, 1), 168) : 24;
   const maxSamplesPerAlias = 288;
 
@@ -61,9 +62,10 @@ export async function getReportedStateHistory(hours = 24): Promise<ReportedState
       JOIN module_list ml
         ON ml.module_id = rs.device_id
         AND ml.io_key IS NOT NULL
-      WHERE ml.alias_key = ANY($1::text[])
+      WHERE ml.alias_key = ANY($3::text[])
+        ${farmFilterSql("rs")}
         AND rs.state ? ml.io_key
-        AND (rs.state ->> ml.io_key) ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        AND (rs.state ->> ml.io_key) ~ '^-?[0-9]+(\.[0-9]+)?$'
     ),
     ranked_recent AS (
       SELECT
@@ -75,12 +77,12 @@ export async function getReportedStateHistory(hours = 24): Promise<ReportedState
     recent_window AS (
       SELECT *
       FROM ranked_recent
-      WHERE sampled_at >= NOW() - ($2::int * INTERVAL '1 hour')
+      WHERE sampled_at >= NOW() - ($4::int * INTERVAL '1 hour')
     ),
     latest_fallback AS (
       SELECT *
       FROM ranked_recent
-      WHERE sample_rank <= $3::int
+      WHERE sample_rank <= $5::int
     ),
     selected AS (
       SELECT * FROM recent_window
@@ -101,6 +103,12 @@ export async function getReportedStateHistory(hours = 24): Promise<ReportedState
     LIMIT 6000;
   `;
 
-  const result = await pool.query(sql, [DEFAULT_ALIASES, safeHours, maxSamplesPerAlias]);
+  const result = await pool.query(sql, [
+    selection?.controllerId ?? null,
+    selection?.groupId ?? null,
+    DEFAULT_ALIASES,
+    safeHours,
+    maxSamplesPerAlias,
+  ]);
   return result.rows;
 }

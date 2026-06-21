@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
+import { resolveFarmSelection } from "@/lib/farms";
 
 type ConfigSnapshotRow = {
   config_name: string;
@@ -11,8 +12,13 @@ type ConfigSnapshotRow = {
   config_payload: Record<string, unknown>;
 };
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const selection = await resolveFarmSelection(searchParams.get("controller_id") ?? searchParams.get("farm"));
+
     const sql = `
       SELECT DISTINCT ON (config_name)
         config_name,
@@ -30,15 +36,17 @@ export async function GET() {
         'programming_actions',
         'programming_modes'
       )
+        AND ($1::uuid IS NULL OR controller_id = $1::uuid)
       ORDER BY config_name, captured_at DESC;
     `;
 
-    const result = await pool.query<ConfigSnapshotRow>(sql);
+    const result = await pool.query<ConfigSnapshotRow>(sql, [selection.controllerId]);
     const configs = Object.fromEntries(result.rows.map((row) => [row.config_name, row]));
 
     return NextResponse.json({
       ok: true,
       generated_at: new Date().toISOString(),
+      selected_farm: selection,
       count: result.rowCount,
       configs,
     });
