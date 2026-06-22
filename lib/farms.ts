@@ -140,6 +140,12 @@ export async function reportedStateFarmFilterSql(alias: string) {
   return `
     AND (
       $1::uuid IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM reported_state farm_identity_probe
+        WHERE farm_identity_probe.controller_id IS NOT NULL
+          OR farm_identity_probe.group_id IS NOT NULL
+      )
       OR ${alias}.controller_id = $1::uuid
       OR ${alias}.source_url ILIKE '%' || $1::text || '%'
       OR COALESCE(${alias}.raw_record::text, '') ILIKE '%' || $1::text || '%'
