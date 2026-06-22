@@ -141,9 +141,18 @@ export async function reportedStateFarmFilterSql(alias: string) {
     AND (
       $1::uuid IS NULL
       OR ${alias}.controller_id = $1::uuid
+      OR ${alias}.source_url ILIKE '%' || $1::text || '%'
+      OR COALESCE(${alias}.raw_record::text, '') ILIKE '%' || $1::text || '%'
       OR (
         $2::uuid IS NOT NULL
         AND ${alias}.group_id = $2::uuid
+      )
+      OR (
+        $2::text IS NOT NULL
+        AND (
+          ${alias}.source_url ILIKE '%' || $2::text || '%'
+          OR COALESCE(${alias}.raw_record::text, '') ILIKE '%' || $2::text || '%'
+        )
       )
     )
   `;
