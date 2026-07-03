@@ -14,6 +14,8 @@ manual imports.
 
 from __future__ import annotations
 
+import html
+import re
 import argparse
 import json
 import os
@@ -61,6 +63,116 @@ REPORTED_STATE_BASE_COLUMNS = [
 
 REPORTED_STATE_IDENTITY_COLUMNS = ["controller_id", "group_id"]
 
+def fetch_text(url: str, timeout_seconds: int) -> str:
+    response = requests.get(url, timeout=timeout_seconds)
+    response.raise_for_status()
+    return response.text
+
+
+def parse_controller_metadata(text: str) -> dict[str, str]:
+    controller_match = re.search(
+        r"Controller ID:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+        text,
+    )
+    group_match = re.search(
+        r"Group ID:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+        text,
+    )
+    version_match = re.search(r"Controller Version:\s*([^<\r\n]+)", text)
+
+    return {
+        "controller_id": controller_match.group(1) if controller_match else "",
+        "group_id": group_match.group(1) if group_match else "",
+        "controller_version": version_match.group(1).strip() if version_match else "",
+    }
+
+
+def extract_code_json_blocks(text: str, source_url: str) -> list[Any]:
+    blocks = re.findall(r"<pre><code>(.*?)</code></pre>", text, flags=re.IGNORECASE | re.DOTALL)
+
+    parsed_blocks: list[Any] = []
+    for index, block in enumerate(blocks):
+        decoded = html.unescape(block).strip()
+        try:
+            parsed_blocks.append(json.loads(decoded))
+        except json.JSONDecodeError as exc:
+            preview = decoded[:500].replace("\n", " ").replace("\r", " ")
+            raise ValueError(
+                f"Found a <pre><code> block in {source_url}, but block #{index + 1} is not valid JSON. "
+                f"Preview: {preview}"
+            ) from exc
+
+    if parsed_blocks:
+        return parsed_blocks
+
+    return [extract_first_json_object(text, source_url)]
+
+
+def extract_first_json_object(text: str, source_url: str) -> Any:
+    decoder = json.JSONDecoder()
+
+    for index, char in enumerate(text):
+        if char not in ("{", "["):
+            continue
+
+        try:
+            parsed, _ = decoder.raw_decode(text[index:])
+            return parsed
+        except json.JSONDecodeError:
+            continue
+
+    preview = text[:500].replace("\n", " ").replace("\r", " ")
+    raise ValueError(
+        f"Could not find valid JSON in response from {source_url}. "
+        f"Response preview: {preview}"
+    )
+
+
+def normalize_farmhand_page_payload(name: str, blocks: list[Any]) -> Any:
+    if name == "reported_state":
+        if not blocks:
+            raise ValueError("The /debug page did not contain a reported-state JSON block.")
+        return blocks[0]
+
+    if name == "settings":
+        return {
+            "global_settings": blocks[0] if len(blocks) > 0 else {},
+            "local_settings": blocks[1] if len(blocks) > 1 else {},
+        }
+
+    if name == "programming":
+        return {
+            "actions": blocks[0] if len(blocks) > 0 else {},
+            "rules": blocks[1] if len(blocks) > 1 else {},
+            "modes": blocks[2] if len(blocks) > 2 else {},
+        }
+
+    if name == "modules":
+        return {
+            "module_list": blocks[0] if len(blocks) > 0 else {},
+            "module_mapping": blocks[1] if len(blocks) > 1 else {},
+        }
+
+    if name == "cameras":
+        return {
+            "camera_list": blocks[0] if len(blocks) > 0 else {},
+            "camera_mapping": blocks[1] if len(blocks) > 1 else {},
+        }
+
+    if len(blocks) == 1:
+        return blocks[0]
+
+    return {"blocks": blocks}
+
+
+def fetch_farmhand_page(name: str, url: str, timeout_seconds: int) -> Any:
+    text = fetch_text(url, timeout_seconds=timeout_seconds)
+
+    if name == "controller":
+        return parse_controller_metadata(text)
+
+    blocks = extract_code_json_blocks(text, source_url=url)
+    return normalize_farmhand_page_payload(name, blocks)
 
 def safe_float(value: Any) -> Optional[float]:
     if value is None:
@@ -381,11 +493,10 @@ def fetch_online_payloads(base_url: str, timeout_seconds: int) -> tuple[dict[str
 
     for name, endpoint in ENDPOINTS.items():
         url = normalize_url(base_url, endpoint)
-        payloads[name] = fetch_json(url, timeout_seconds=timeout_seconds)
+        payloads[name] = fetch_farmhand_page(name, url, timeout_seconds=timeout_seconds)
         sources[name] = url
 
     return payloads, sources
-
 
 def load_file_payloads(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, str]]:
     paths = {
