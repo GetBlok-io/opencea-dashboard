@@ -85,12 +85,35 @@ def epoch_to_datetime(epoch_value: Any) -> Optional[datetime]:
 def normalize_url(base_url: str, endpoint: str) -> str:
     return urljoin(base_url.rstrip("/") + "/", endpoint.lstrip("/"))
 
+def extract_embedded_json(text: str, source_url: str) -> Any:
+    decoder = json.JSONDecoder()
+
+    candidate_positions = [
+        index for index, char in enumerate(text)
+        if char in ("{", "[")
+    ]
+
+    for index in candidate_positions:
+        try:
+            parsed, _ = decoder.raw_decode(text[index:])
+            return parsed
+        except json.JSONDecodeError:
+            continue
+
+    preview = text[:500].replace("\n", " ").replace("\r", " ")
+    raise ValueError(
+        f"Could not find valid JSON in response from {source_url}. "
+        f"Response preview: {preview}"
+    )
 
 def fetch_json(url: str, timeout_seconds: int) -> Any:
     response = requests.get(url, timeout=timeout_seconds)
     response.raise_for_status()
-    return response.json()
 
+    try:
+        return response.json()
+    except ValueError:
+        return extract_embedded_json(response.text, source_url=url) 
 
 def load_json_file(path: Optional[str]) -> Any:
     if not path:
