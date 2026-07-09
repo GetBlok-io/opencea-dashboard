@@ -127,3 +127,24 @@ export async function getLatestReportedState(selection?: FarmSelection): Promise
   const result = await pool.query(sql, [selection?.controllerId ?? null, selection?.groupId ?? null]);
   return result.rows;
 }
+
+export async function getLatestReportedStateScrapedAt(selection?: FarmSelection): Promise<string | null> {
+  const farmFilter = await reportedStateFarmFilterSql("rs");
+
+  const sql = `
+    SELECT MAX(rs.scraped_at) AS latest_scraped_at
+    FROM reported_state rs
+    WHERE TRUE
+      ${farmFilter};
+  `;
+
+  const result = await pool.query(sql, [
+    selection?.controllerId ?? null,
+    selection?.groupId ?? null,
+  ]);
+
+  const value = result.rows[0]?.latest_scraped_at;
+  if (!value) return null;
+
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}

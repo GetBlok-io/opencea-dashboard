@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -13,6 +13,7 @@ import {
 import RecipeDashboard from "./RecipeDashboard";
 
 type TemperatureUnit = "C" | "F";
+type HistoryHours = 1 | 6 | 12 | 24;
 type ZoneName = "Container" | "Nursery" | "Cultivation";
 type MetricRow = "primary" | "secondary" | "other";
 type AppSection = "monitoring" | "control" | "recipe";
@@ -101,6 +102,63 @@ type ChartDefinition = {
 
 const ZONES: ZoneName[] = ["Container", "Nursery", "Cultivation"];
 const TEMP_KEYS = new Set(["temp", "temperature", "water_temperature", "air_temperature"]);
+const TEMPERATURE_UNIT_STORAGE_KEY = "opencea.temperatureUnit";
+const HISTORY_HOURS_STORAGE_KEY = "opencea.historyHours";
+const LIVE_CHECK_SECONDS = 5;
+
+const HISTORY_RANGES: { hours: HistoryHours; label: string }[] = [
+  { hours: 1, label: "1h" },
+  { hours: 6, label: "6h" },
+  { hours: 12, label: "12h" },
+  { hours: 24, label: "24h" },
+];
+
+type LatestTimestampApiResponse = {
+  ok: boolean;
+  generated_at?: string;
+  latest_scraped_at?: string | null;
+  error?: string;
+};
+
+type FarmOption = {
+  controller_id: string;
+  group_id: string | null;
+  farm_name: string;
+  config_type: string | null;
+  label: string;
+  value: string;
+};
+
+type DashboardProps = {
+  initialRows: ReportedStateRow[];
+  farmOptions?: FarmOption[];
+  selectedControllerId?: string | null;
+};
+
+function readStoredTemperatureUnit(): TemperatureUnit {
+  if (typeof window === "undefined") return "C";
+  const stored = window.localStorage.getItem(TEMPERATURE_UNIT_STORAGE_KEY);
+  return stored === "F" ? "F" : "C";
+}
+
+function readStoredHistoryHours(): HistoryHours {
+  if (typeof window === "undefined") return 1;
+  const stored = Number(window.localStorage.getItem(HISTORY_HOURS_STORAGE_KEY));
+  return HISTORY_RANGES.some((range) => range.hours === stored) ? stored as HistoryHours : 1;
+}
+
+function latestScrapedAtFromRows(rows: ReportedStateRow[]) {
+  return rows
+    .map((row) => row.scraped_at)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
+}
+
+function buildFarmQuery(selectedControllerId?: string | null) {
+  const params = new URLSearchParams();
+  if (selectedControllerId) params.set("controller_id", selectedControllerId);
+  return params;
+}
 
 const CHARTS: ChartDefinition[] = [
   { aliasKey: "air_temperature", title: "Air Temperature", subtitle: "Container climate", unit: "°C", zone: "Container", kind: "temperature" },
@@ -676,25 +734,34 @@ function RecipeFoundation({ temperatureUnit }: { temperatureUnit: TemperatureUni
   return <RecipeDashboard temperatureUnit={temperatureUnit} />;
 }
 
-export default function Dashboard({ initialRows }: { initialRows: ReportedStateRow[] }) {
+export default function Dashboard({ initialRows, selectedControllerId }: DashboardProps) {
   const refreshSeconds = Number(process.env.NEXT_PUBLIC_REFRESH_SECONDS ?? "30");
   const farmName = process.env.NEXT_PUBLIC_FARM_NAME ?? "PeaPod-1";
   const [rows, setRows] = useState<ReportedStateRow[]>(initialRows);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [historyHours, setHistoryHours] = useState<HistoryHours>(readStoredHistoryHours);
   const [lastRefresh, setLastRefresh] = useState<string>(new Date().toISOString());
+  const [latestScrapedAt, setLatestScrapedAt] = useState<string | null>(() => latestScrapedAtFromRows(initialRows));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>("C");
+  const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>(readStoredTemperatureUnit);
   const [activeSection, setActiveSection] = useState<AppSection>("monitoring");
 
-  async function refresh() {
-    setLoading(true);
+  const refresh = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
 
     try {
+      const latestParams = buildFarmQuery(selectedControllerId);
+      const historyParams = buildFarmQuery(selectedControllerId);
+      historyParams.set("hours", String(historyHours));
+
+      const latestUrl = `/api/reported-state/latest?${latestParams.toString()}`;
+      const historyUrl = `/api/reported-state/history?${historyParams.toString()}`;
+
       const [latestResponse, historyResponse] = await Promise.all([
-        fetch("/api/reported-state/latest", { cache: "no-store" }),
-        fetch("/api/reported-state/history?hours=24", { cache: "no-store" }),
+        fetch(latestUrl, { cache: "no-store" }),
+        fetch(historyUrl, { cache: "no-store" }),
       ]);
       const latestPayload = (await latestResponse.json()) as ApiResponse;
       const historyPayload = (await historyResponse.json()) as HistoryApiResponse;
@@ -704,6 +771,7 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
       }
 
       setRows(latestPayload.data);
+      setLatestScrapedAt(latestScrapedAtFromRows(latestPayload.data));
       setLastRefresh(latestPayload.generated_at ?? new Date().toISOString());
 
       if (historyResponse.ok && historyPayload.ok && historyPayload.data) {
@@ -712,15 +780,50 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  }
+  }, [historyHours, selectedControllerId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(TEMPERATURE_UNIT_STORAGE_KEY, temperatureUnit);
+  }, [temperatureUnit]);
+
+  useEffect(() => {
+    window.localStorage.setItem(HISTORY_HOURS_STORAGE_KEY, String(historyHours));
+  }, [historyHours]);
 
   useEffect(() => {
     refresh();
-    const interval = window.setInterval(refresh, refreshSeconds * 1000);
+    const interval = window.setInterval(() => refresh(false), refreshSeconds * 1000);
     return () => window.clearInterval(interval);
-  }, [refreshSeconds]);
+  }, [refresh, refreshSeconds]);
+
+  useEffect(() => {
+    async function checkForNewData() {
+      try {
+        const params = buildFarmQuery(selectedControllerId);
+        const response = await fetch(`/api/reported-state/latest-timestamp?${params.toString()}`, { cache: "no-store" });
+        const payload = (await response.json()) as LatestTimestampApiResponse;
+
+        if (!response.ok || !payload.ok) return;
+        if (!payload.latest_scraped_at) return;
+
+        if (!latestScrapedAt) {
+          setLatestScrapedAt(payload.latest_scraped_at);
+          return;
+        }
+
+        if (payload.latest_scraped_at !== latestScrapedAt) {
+          await refresh(false);
+        }
+      } catch {
+        // Keep background refresh quiet. The normal refresh path reports visible errors.
+      }
+    }
+
+    const interval = window.setInterval(checkForNewData, LIVE_CHECK_SECONDS * 1000);
+    return () => window.clearInterval(interval);
+  }, [latestScrapedAt, refresh, selectedControllerId]);
 
   const connectedRows = useMemo(() => rows.filter((row) => row.connected === true), [rows]);
   const zoneGroups = useMemo(() => buildZoneGroups(connectedRows), [connectedRows]);
@@ -755,6 +858,18 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
             <button className={temperatureUnit === "C" ? "toggle active" : "toggle"} onClick={() => setTemperatureUnit("C")} type="button">°C</button>
             <button className={temperatureUnit === "F" ? "toggle active" : "toggle"} onClick={() => setTemperatureUnit("F")} type="button">°F</button>
           </div>
+	  <div className="toggle-group" aria-label="Chart timeline">
+            {HISTORY_RANGES.map((range) => (
+              <button
+                key={range.hours}
+                className={historyHours === range.hours ? "toggle active" : "toggle"}
+                onClick={() => setHistoryHours(range.hours)}
+                type="button"
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
           <button onClick={refresh} disabled={loading} type="button">
             {loading ? "Refreshing..." : "Refresh now"}
           </button>
@@ -778,7 +893,8 @@ export default function Dashboard({ initialRows }: { initialRows: ReportedStateR
 
       <div className="subheader">
         <p>Last refreshed: {formatDate(lastRefresh)}</p>
-        <p>Auto-refresh: every {refreshSeconds} seconds</p>
+	<p>Chart range: last {historyHours} hour{historyHours === 1 ? "" : "s"}</p>
+        <p>Auto-refresh: every {refreshSeconds} seconds · New-data check: every {LIVE_CHECK_SECONDS} seconds</p>
       </div>
 
       {error ? <div className="error-box">{error}</div> : null}
