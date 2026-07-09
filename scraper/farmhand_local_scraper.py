@@ -15,7 +15,6 @@ manual imports.
 from __future__ import annotations
 
 import html
-import re
 import argparse
 import json
 import os
@@ -62,6 +61,9 @@ REPORTED_STATE_BASE_COLUMNS = [
 ]
 
 REPORTED_STATE_IDENTITY_COLUMNS = ["controller_id", "group_id"]
+
+class IdentityMismatchError(RuntimeError):
+    """Raised when configured farm identity conflicts with Farmhand online metadata."""
 
 def fetch_text(url: str, timeout_seconds: int) -> str:
     response = requests.get(url, timeout=timeout_seconds)
@@ -193,39 +195,8 @@ def epoch_to_datetime(epoch_value: Any) -> Optional[datetime]:
     except (OSError, OverflowError, ValueError):
         return None
 
-
 def normalize_url(base_url: str, endpoint: str) -> str:
     return urljoin(base_url.rstrip("/") + "/", endpoint.lstrip("/"))
-
-def extract_embedded_json(text: str, source_url: str) -> Any:
-    decoder = json.JSONDecoder()
-
-    candidate_positions = [
-        index for index, char in enumerate(text)
-        if char in ("{", "[")
-    ]
-
-    for index in candidate_positions:
-        try:
-            parsed, _ = decoder.raw_decode(text[index:])
-            return parsed
-        except json.JSONDecodeError:
-            continue
-
-    preview = text[:500].replace("\n", " ").replace("\r", " ")
-    raise ValueError(
-        f"Could not find valid JSON in response from {source_url}. "
-        f"Response preview: {preview}"
-    )
-
-def fetch_json(url: str, timeout_seconds: int) -> Any:
-    response = requests.get(url, timeout=timeout_seconds)
-    response.raise_for_status()
-
-    try:
-        return response.json()
-    except ValueError:
-        return extract_embedded_json(response.text, source_url=url) 
 
 def load_json_file(path: Optional[str]) -> Any:
     if not path:
@@ -263,6 +234,65 @@ def looks_like_uuid(value: Optional[str]) -> bool:
         return False
     return bool(re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", value))
 
+def normalize_uuid(value: Optional[str]) -> Optional[str]:
+    if value and looks_like_uuid(value):
+        return value.lower()
+    return value
+
+
+def discover_controller_identity(controller_payload: Any) -> tuple[Optional[str], Optional[str]]:
+    if controller_payload is None:
+        return None, None
+
+    controller_id = recursive_find_id(
+        controller_payload,
+        ["controller_id", "controllerId", "controller", "controller_uuid", "id"],
+    )
+    group_id = recursive_find_id(
+        controller_payload,
+        ["group_id", "groupId", "group", "organization_id", "organizationId", "farm_group_id"],
+    )
+
+    return normalize_uuid(controller_id), normalize_uuid(group_id)
+
+
+def validate_online_identity(
+    controller_payload: Any,
+    configured_controller_id: Optional[str],
+    configured_group_id: Optional[str],
+    allow_identity_mismatch: bool,
+) -> tuple[Optional[str], Optional[str]]:
+    discovered_controller_id, discovered_group_id = discover_controller_identity(controller_payload)
+
+    configured_controller_id = normalize_uuid(configured_controller_id)
+    configured_group_id = normalize_uuid(configured_group_id)
+
+    mismatches: list[str] = []
+
+    if configured_controller_id and discovered_controller_id and configured_controller_id != discovered_controller_id:
+        mismatches.append(
+            f"Configured controller_id: {configured_controller_id}\n"
+            f"Discovered controller_id: {discovered_controller_id}"
+        )
+
+    if configured_group_id and discovered_group_id and configured_group_id != discovered_group_id:
+        mismatches.append(
+            f"Configured group_id: {configured_group_id}\n"
+            f"Discovered group_id: {discovered_group_id}"
+        )
+
+    if mismatches and not allow_identity_mismatch:
+        raise IdentityMismatchError(
+            "Farmhand identity mismatch.\n"
+            + "\n".join(mismatches)
+            + "\nRefusing to ingest because this could co-mingle farm telemetry.\n"
+            + "Correct the .env file or rerun with --allow-identity-mismatch only for debugging."
+        )
+
+    return (
+        configured_controller_id or discovered_controller_id,
+        configured_group_id or discovered_group_id,
+    )
 
 def resolve_controller_identity(
     controller_payload: Any,
@@ -528,6 +558,18 @@ def parse_args() -> argparse.Namespace:
     online.add_argument("--base-url", default=os.getenv("FARMHAND_BASE_URL", DEFAULT_BASE_URL))
     online.add_argument("--timeout", type=int, default=int(os.getenv("REQUEST_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS))))
 
+    online.add_argument(
+    "--allow-identity-mismatch",
+    action="store_true",
+    help="Allow .env/CLI controller or group IDs to differ from the Farmhand root page. Debug use only.",
+    )
+    
+    online.add_argument(
+    "--check-identity",
+    action="store_true",
+    help="Fetch online metadata, validate identity, print the result, and exit without database writes.",
+    )
+
     files = subparsers.add_parser("files", help="Import already exported JSON files.")
     files.add_argument("--controller-file")
     files.add_argument("--reported-state-file", required=True)
@@ -543,6 +585,11 @@ def parse_args() -> argparse.Namespace:
         subparser.add_argument("--farm-name", default=os.getenv("FARM_NAME", "OpenCEA Farm"))
         subparser.add_argument("--config-type", default=os.getenv("FARM_CONFIG_TYPE", DEFAULT_CONFIG_TYPE))
         subparser.add_argument("--skip-config", action="store_true", help="Only ingest /debug reported-state data.")
+        subparser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Fetch and parse payloads, print a summary, and exit without database writes.",
+        )
 
     args = parser.parse_args()
     if args.mode is None:
@@ -555,36 +602,56 @@ def parse_args() -> argparse.Namespace:
         args.farm_name = os.getenv("FARM_NAME", "OpenCEA Farm")
         args.config_type = os.getenv("FARM_CONFIG_TYPE", DEFAULT_CONFIG_TYPE)
         args.skip_config = False
+        args.allow_identity_mismatch = False
+        args.check_identity = False
+        args.dry_run = False
 
     return args
 
 
 def main() -> None:
     args = parse_args()
-    if not args.database_url:
-        raise RuntimeError("DATABASE_URL is required.")
-
     captured_at = datetime.now(timezone.utc)
 
     if args.mode == "files":
         payloads, sources = load_file_payloads(args)
+        controller_id, group_id = resolve_controller_identity(
+            payloads.get("controller"),
+            explicit_controller_id=args.controller_id,
+            explicit_group_id=args.group_id,
+        )
     else:
         payloads, sources = fetch_online_payloads(args.base_url, timeout_seconds=args.timeout)
+        controller_id, group_id = validate_online_identity(
+            payloads.get("controller"),
+            configured_controller_id=args.controller_id,
+            configured_group_id=args.group_id,
+            allow_identity_mismatch=getattr(args, "allow_identity_mismatch", False),
+        )
 
     if "reported_state" not in payloads:
         raise RuntimeError("Reported-state/debug payload is required.")
-
-    controller_id, group_id = resolve_controller_identity(
-        payloads.get("controller"),
-        explicit_controller_id=args.controller_id,
-        explicit_group_id=args.group_id,
-    )
 
     if not controller_id:
         print(
             "Warning: controller_id was not discovered. Set FARMHAND_CONTROLLER_ID or pass --controller-id for farm-aware inserts.",
             file=sys.stderr,
         )
+
+    if getattr(args, "dry_run", False) or getattr(args, "check_identity", False):
+        reported_state = payloads.get("reported_state")
+        reported_state_count = len(reported_state) if isinstance(reported_state, dict) else 0
+
+        print("Farmhand import dry run complete. No database writes performed.")
+        print(f"  mode: {args.mode}")
+        print(f"  controller_id: {controller_id or '-'}")
+        print(f"  group_id: {group_id or '-'}")
+        print(f"  reported_state devices: {reported_state_count}")
+        print(f"  payloads fetched: {', '.join(sorted(payloads.keys()))}")
+        return
+
+    if not args.database_url:
+        raise RuntimeError("DATABASE_URL is required.")
 
     with psycopg.connect(args.database_url) as conn:
         ensure_farm_registry(
