@@ -1,15 +1,11 @@
 import { pool } from "./db";
-import { FarmSelection } from "./farms";
-import { ModuleListEntry } from "./reportedState";
+import type { FarmSelection } from "./farms";
+import type { ModuleListEntry } from "./reportedState";
 
 function getRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function getArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
 }
 
 function textValue(value: unknown): string | null {
@@ -27,41 +23,32 @@ function numberValue(value: unknown, fallback = 999): number {
   return fallback;
 }
 
-function normalizeModuleEntry(value: unknown, fallbackOrder: number): ModuleListEntry | null {
-  const record = getRecord(value);
-
-  const aliasKey = textValue(record.alias_key ?? record.aliasKey ?? record.alias);
-  const moduleId = textValue(record.module_id ?? record.moduleId ?? record.id);
-  const displayName = textValue(record.display_name ?? record.displayName ?? record.name ?? aliasKey);
-  const ioKey = textValue(record.io_key ?? record.ioKey ?? record.io);
-  const zone = textValue(record.zone);
-  const aliasedZone = textValue(record.aliased_zone ?? record.aliasedZone);
-  const moduleType = textValue(record.module_type ?? record.moduleType ?? record.type);
-  const ioOverride = textValue(record.io_override ?? record.ioOverride);
-
-  if (!aliasKey || !moduleId) return null;
-
-  return {
-    alias_key: aliasKey,
-    module_id: moduleId,
-    io_key: ioKey,
-    io_override: ioOverride,
-    display_name: displayName ?? aliasKey,
-    zone,
-    aliased_zone: aliasedZone,
-    display_order: numberValue(record.display_order ?? record.displayOrder, fallbackOrder),
-    module_type: moduleType,
-  };
-}
-
 function parseModuleSnapshot(payload: Record<string, unknown>): ModuleListEntry[] {
-  const moduleList = getArray(payload.module_list);
+  const moduleList = getRecord(payload.module_list);
+  const moduleMapping = getRecord(payload.module_mapping);
   const entries: ModuleListEntry[] = [];
 
-  moduleList.forEach((entry, index) => {
-    const normalized = normalizeModuleEntry(entry, index + 1);
-    if (normalized) entries.push(normalized);
-  });
+  for (const [aliasKey, rawMapping] of Object.entries(moduleMapping)) {
+    const mapping = getRecord(rawMapping);
+
+    const moduleId = textValue(mapping.module);
+    const ioKey = textValue(mapping.io);
+    if (!moduleId || !ioKey) continue;
+
+    const moduleInfo = getRecord(moduleList[moduleId]);
+
+    entries.push({
+      alias_key: aliasKey,
+      module_id: moduleId,
+      io_key: ioKey,
+      io_override: textValue(mapping.io_override),
+      display_name: textValue(mapping.name) ?? aliasKey,
+      zone: textValue(mapping.zone),
+      aliased_zone: textValue(mapping.aliased_zone),
+      display_order: numberValue(mapping.order),
+      module_type: textValue(moduleInfo.type),
+    });
+  }
 
   return entries;
 }

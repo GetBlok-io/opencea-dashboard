@@ -753,7 +753,7 @@ export default function Dashboard({
   const [rows, setRows] = useState<ReportedStateRow[]>(initialRows);
   const [farmOptions] = useState<FarmOption[]>(initialFarmOptions);
   const [selectedControllerId, setSelectedControllerId] = useState<string | null>(
-  initialSelectedControllerId ?? initialFarmOptions[0]?.controller_id ?? null,
+    initialSelectedControllerId ?? initialFarmOptions[0]?.controller_id ?? null,
   );
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [historyHours, setHistoryHours] = useState<HistoryHours>(readStoredHistoryHours);
@@ -769,8 +769,8 @@ const refresh = useCallback(async (showLoading = true, controllerId = selectedCo
     setError(null);
 
     try {
-      const latestParams = buildFarmQuery(selectedControllerId);
-      const historyParams = buildFarmQuery(selectedControllerId);
+      const latestParams = buildFarmQuery(controllerId);
+      const historyParams = buildFarmQuery(controllerId);
       historyParams.set("hours", String(historyHours));
 
       const latestUrl = `/api/reported-state/latest?${latestParams.toString()}`;
@@ -849,26 +849,26 @@ const refresh = useCallback(async (showLoading = true, controllerId = selectedCo
   }, [rows]);
   const zoneGroups = useMemo(() => buildZoneGroups(connectedRows), [connectedRows]);
 
-const selectedFarm = useMemo(() => {
-  	return farmOptions.find((farm) => farm.controller_id === selectedControllerId) ?? null;
-	}, [farmOptions, selectedControllerId]);
+  const selectedFarm = useMemo(() => {
+    return farmOptions.find((farm) => farm.controller_id === selectedControllerId) ?? null;
+  }, [farmOptions, selectedControllerId]);
 
-const farmName = selectedFarm?.farm_name ?? selectedFarm?.label ?? selectedControllerId ?? "Select a farm";
+  const farmName = selectedFarm?.farm_name ?? selectedFarm?.label ?? selectedControllerId ?? "Select a farm";
 
-function handleFarmChange(nextControllerId: string) {
-  const nextValue = nextControllerId || null;
+  function handleFarmChange(nextControllerId: string) {
+    const nextValue = nextControllerId || null;
 
-  setSelectedControllerId(nextValue);
-  setRows([]);
-  setHistory([]);
-  setLatestScrapedAt(null);
-  setError(null);
+    setSelectedControllerId(nextValue);
+    setRows([]);
+    setHistory([]);
+    setLatestScrapedAt(null);
+    setError(null);
 
-  const nextUrl = nextValue ? `/?farm=${encodeURIComponent(nextValue)}` : "/";
-  window.history.replaceState(null, "", nextUrl);
+    const nextUrl = nextValue ? `/?farm=${encodeURIComponent(nextValue)}` : "/";
+    window.history.replaceState(null, "", nextUrl);
 
-  void refresh(true, nextValue);
-}
+    void refresh(true, nextValue);
+  }
 
   const summary = useMemo(() => {
     const activeZones = zoneGroups.filter((group) => group.metrics.length > 0).length;
@@ -890,29 +890,54 @@ function handleFarmChange(nextControllerId: string) {
             Open-source visibility for CEA container farms. Monitoring is live now; Control and Recipe foundations are staged for safe expansion.
           </p>
         </div>
-	<div className="hero-actions">
-  		<label className="farm-selector">
-    		<span>Farm</span>
-    		<select value={selectedControllerId ?? ""} onChange={(event) => handleFarmChange(event.target.value)}>
-      		{farmOptions.length === 0 ? <option value="">No farms found</option> : null}
-      		{farmOptions.map((farm) => (
-        	<option value={farm.controller_id} key={farm.controller_id}>
-          	{farm.label || farm.farm_name || farm.controller_id}
-        	</option>
-      		))}
-    		</select>
-  		</label>
-  	<div className="toggle-group" aria-label="Dashboard section">
 
-            <button className={activeSection === "monitoring" ? "toggle active" : "toggle"} onClick={() => setActiveSection("monitoring")} type="button">Monitoring</button>
-            <button className={activeSection === "control" ? "toggle active" : "toggle"} onClick={() => setActiveSection("control")} type="button">Control</button>
-            <button className={activeSection === "recipe" ? "toggle active" : "toggle"} onClick={() => setActiveSection("recipe")} type="button">Recipe</button>
+        <div className="hero-actions">
+          <label className="farm-selector">
+            <span>Farm</span>
+            <select value={selectedControllerId ?? ""} onChange={(event) => handleFarmChange(event.target.value)}>
+              {farmOptions.length === 0 ? <option value="">No farms found</option> : null}
+              {farmOptions.map((farm) => (
+                <option value={farm.controller_id} key={farm.controller_id}>
+                  {farm.label || farm.farm_name || farm.controller_id}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="toggle-group" aria-label="Dashboard section">
+            <button
+              className={activeSection === "monitoring" ? "toggle active" : "toggle"}
+              onClick={() => setActiveSection("monitoring")}
+              type="button"
+            >
+              Monitoring
+            </button>
+            <button
+              className={activeSection === "control" ? "toggle active" : "toggle"}
+              onClick={() => setActiveSection("control")}
+              type="button"
+            >
+              Control
+            </button>
+            <button
+              className={activeSection === "recipe" ? "toggle active" : "toggle"}
+              onClick={() => setActiveSection("recipe")}
+              type="button"
+            >
+              Recipe
+            </button>
           </div>
+
           <div className="toggle-group" aria-label="Temperature unit">
-            <button className={temperatureUnit === "C" ? "toggle active" : "toggle"} onClick={() => setTemperatureUnit("C")} type="button">°C</button>
-            <button className={temperatureUnit === "F" ? "toggle active" : "toggle"} onClick={() => setTemperatureUnit("F")} type="button">°F</button>
+            <button className={temperatureUnit === "C" ? "toggle active" : "toggle"} onClick={() => setTemperatureUnit("C")} type="button">
+              °C
+            </button>
+            <button className={temperatureUnit === "F" ? "toggle active" : "toggle"} onClick={() => setTemperatureUnit("F")} type="button">
+              °F
+            </button>
           </div>
-	  <div className="toggle-group" aria-label="Chart timeline">
+
+          <div className="toggle-group" aria-label="Chart timeline">
             {HISTORY_RANGES.map((range) => (
               <button
                 key={range.hours}
@@ -924,9 +949,10 @@ function handleFarmChange(nextControllerId: string) {
               </button>
             ))}
           </div>
-	  <button onClick={() => refresh(true)} disabled={loading} type="button">
-  		{loading ? "Refreshing..." : "Refresh now"}
-	  </button>
+
+          <button onClick={() => refresh(true)} disabled={loading} type="button">
+            {loading ? "Refreshing..." : "Refresh now"}
+          </button>
         </div>
       </section>
 
@@ -947,7 +973,7 @@ function handleFarmChange(nextControllerId: string) {
 
       <div className="subheader">
         <p>Last refreshed: {formatDate(lastRefresh)}</p>
-	<p>Chart range: last {historyHours} hour{historyHours === 1 ? "" : "s"}</p>
+        <p>Chart range: last {historyHours} hour{historyHours === 1 ? "" : "s"}</p>
         <p>Auto-refresh: every {refreshSeconds} seconds · New-data check: every {LIVE_CHECK_SECONDS} seconds</p>
       </div>
 
@@ -967,9 +993,10 @@ function handleFarmChange(nextControllerId: string) {
       ) : null}
 
       {activeSection === "control" ? <ControlFoundation zoneGroups={zoneGroups} /> : null}
+
       {activeSection === "recipe" ? (
-  		<RecipeFoundation temperatureUnit={temperatureUnit} controllerId={selectedControllerId} />
-	) : null}
+        <RecipeFoundation temperatureUnit={temperatureUnit} controllerId={selectedControllerId} />
+      ) : null}
     </main>
   );
 }
