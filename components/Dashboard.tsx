@@ -95,6 +95,13 @@ type AlertEventRow = {
   updated_at: string;
 };
 
+type AlertRuleRecipient = {
+  id: string;
+  name: string;
+  recipient_type: string;
+  enabled: boolean;
+};
+
 type AlertRuleRow = {
   id: string;
   farm_controller_id: string | null;
@@ -111,6 +118,7 @@ type AlertRuleRow = {
   priority: string;
   created_at: string;
   updated_at: string;
+  recipients?: AlertRuleRecipient[];
 };
 
 type AlertEventsApiResponse = {
@@ -933,6 +941,7 @@ function AlertsFoundation({
               <span>Name</span>
               <span>Farm</span>
               <span>Metric</span>
+              <span>Recipients</span>
               <span>Soak</span>
             </div>
             {rules.map((rule) => (
@@ -942,6 +951,7 @@ function AlertsFoundation({
                 <span>{rule.name}</span>
                 <span>{rule.farm_name ?? rule.farm_controller_id ?? "All farms"}</span>
                 <span>{rule.metric_key}</span>
+                <span>{rule.recipients?.length ? rule.recipients.map((recipient) => recipient.name).join(", ") : "No recipients"}</span>
                 <span>{rule.soak_seconds}s</span>
               </div>
             ))}

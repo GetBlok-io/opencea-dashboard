@@ -274,7 +274,7 @@ button.toggle.active { background: var(--accent); color: #04111d; }
   align-items: center;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: 0.8fr 0.8fr 1.8fr 1.2fr 1fr 1.2fr;
+  grid-template-columns: 0.8fr 0.8fr 1.8fr 1.2fr 1fr 1.4fr 1fr;
   min-width: 860px;
 }
 

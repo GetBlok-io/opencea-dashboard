@@ -21,9 +21,27 @@ export async function GET() {
         ar.cooldown_seconds,
         ar.priority,
         ar.created_at,
-        ar.updated_at
+        ar.updated_at,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', rec.id::text,
+              'name', rec.name,
+              'recipient_type', rec.recipient_type,
+              'enabled', rec.enabled
+            )
+          ) FILTER (WHERE rec.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS recipients
       FROM alert_rules ar
-      LEFT JOIN farm_registry fr ON fr.controller_id = ar.farm_controller_id
+      LEFT JOIN farm_registry fr
+        ON fr.controller_id = ar.farm_controller_id
+      LEFT JOIN alert_rule_recipients arr
+        ON arr.alert_rule_id = ar.id
+        AND arr.enabled = true
+      LEFT JOIN alert_recipients rec
+        ON rec.id = arr.alert_recipient_id
+      GROUP BY ar.id, fr.farm_name
       ORDER BY ar.enabled DESC, ar.priority DESC, ar.name ASC;
     `);
 
