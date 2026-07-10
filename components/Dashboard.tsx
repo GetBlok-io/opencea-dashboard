@@ -50,6 +50,7 @@ type ApiResponse = {
   ok: boolean;
   count?: number;
   generated_at?: string;
+  selected_farm?: { controllerId: string | null; groupId: string | null };
   data?: ReportedStateRow[];
   error?: string;
 };
@@ -733,14 +734,27 @@ function ControlFoundation({ zoneGroups }: { zoneGroups: ZoneGroup[] }) {
   );
 }
 
-function RecipeFoundation({ temperatureUnit }: { temperatureUnit: TemperatureUnit }) {
-  return <RecipeDashboard temperatureUnit={temperatureUnit} />;
+function RecipeFoundation({
+  temperatureUnit,
+  controllerId,
+}: {
+  temperatureUnit: TemperatureUnit;
+  controllerId: string | null;
+}) {
+  return <RecipeDashboard temperatureUnit={temperatureUnit} controllerId={controllerId} />;
 }
 
-export default function Dashboard({ initialRows, selectedControllerId }: DashboardProps) {
+export default function Dashboard({
+  initialRows,
+  farmOptions: initialFarmOptions = [],
+  selectedControllerId: initialSelectedControllerId = null,
+}: DashboardProps) {
   const refreshSeconds = Number(process.env.NEXT_PUBLIC_REFRESH_SECONDS ?? "30");
-  const farmName = process.env.NEXT_PUBLIC_FARM_NAME ?? "PeaPod-1";
   const [rows, setRows] = useState<ReportedStateRow[]>(initialRows);
+  const [farmOptions] = useState<FarmOption[]>(initialFarmOptions);
+  const [selectedControllerId, setSelectedControllerId] = useState<string | null>(
+  initialSelectedControllerId ?? initialFarmOptions[0]?.controller_id ?? null,
+  );
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [historyHours, setHistoryHours] = useState<HistoryHours>(readStoredHistoryHours);
   const [lastRefresh, setLastRefresh] = useState<string>(new Date().toISOString());
@@ -750,7 +764,7 @@ export default function Dashboard({ initialRows, selectedControllerId }: Dashboa
   const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>(readStoredTemperatureUnit);
   const [activeSection, setActiveSection] = useState<AppSection>("monitoring");
 
-  const refresh = useCallback(async (showLoading = true) => {
+const refresh = useCallback(async (showLoading = true, controllerId = selectedControllerId) => {
     if (showLoading) setLoading(true);
     setError(null);
 
@@ -776,6 +790,7 @@ export default function Dashboard({ initialRows, selectedControllerId }: Dashboa
       setRows(latestPayload.data);
       setLatestScrapedAt(latestScrapedAtFromRows(latestPayload.data));
       setLastRefresh(latestPayload.generated_at ?? new Date().toISOString());
+      setSelectedControllerId(latestPayload.selected_farm?.controllerId ?? controllerId ?? null);
 
       if (historyResponse.ok && historyPayload.ok && historyPayload.data) {
         setHistory(historyPayload.data);
@@ -834,6 +849,27 @@ export default function Dashboard({ initialRows, selectedControllerId }: Dashboa
   }, [rows]);
   const zoneGroups = useMemo(() => buildZoneGroups(connectedRows), [connectedRows]);
 
+const selectedFarm = useMemo(() => {
+  	return farmOptions.find((farm) => farm.controller_id === selectedControllerId) ?? null;
+	}, [farmOptions, selectedControllerId]);
+
+const farmName = selectedFarm?.farm_name ?? selectedFarm?.label ?? selectedControllerId ?? "Select a farm";
+
+function handleFarmChange(nextControllerId: string) {
+  const nextValue = nextControllerId || null;
+
+  setSelectedControllerId(nextValue);
+  setRows([]);
+  setHistory([]);
+  setLatestScrapedAt(null);
+  setError(null);
+
+  const nextUrl = nextValue ? `/?farm=${encodeURIComponent(nextValue)}` : "/";
+  window.history.replaceState(null, "", nextUrl);
+
+  void refresh(true, nextValue);
+}
+
   const summary = useMemo(() => {
     const activeZones = zoneGroups.filter((group) => group.metrics.length > 0).length;
     const latestDeviceUpdate = connectedRows
@@ -854,8 +890,20 @@ export default function Dashboard({ initialRows, selectedControllerId }: Dashboa
             Open-source visibility for CEA container farms. Monitoring is live now; Control and Recipe foundations are staged for safe expansion.
           </p>
         </div>
-        <div className="hero-actions">
-          <div className="toggle-group" aria-label="Dashboard section">
+	<div className="hero-actions">
+  		<label className="farm-selector">
+    		<span>Farm</span>
+    		<select value={selectedControllerId ?? ""} onChange={(event) => handleFarmChange(event.target.value)}>
+      		{farmOptions.length === 0 ? <option value="">No farms found</option> : null}
+      		{farmOptions.map((farm) => (
+        	<option value={farm.controller_id} key={farm.controller_id}>
+          	{farm.label || farm.farm_name || farm.controller_id}
+        	</option>
+      		))}
+    		</select>
+  		</label>
+  	<div className="toggle-group" aria-label="Dashboard section">
+
             <button className={activeSection === "monitoring" ? "toggle active" : "toggle"} onClick={() => setActiveSection("monitoring")} type="button">Monitoring</button>
             <button className={activeSection === "control" ? "toggle active" : "toggle"} onClick={() => setActiveSection("control")} type="button">Control</button>
             <button className={activeSection === "recipe" ? "toggle active" : "toggle"} onClick={() => setActiveSection("recipe")} type="button">Recipe</button>
@@ -919,7 +967,9 @@ export default function Dashboard({ initialRows, selectedControllerId }: Dashboa
       ) : null}
 
       {activeSection === "control" ? <ControlFoundation zoneGroups={zoneGroups} /> : null}
-      {activeSection === "recipe" ? <RecipeFoundation temperatureUnit={temperatureUnit} /> : null}
+      {activeSection === "recipe" ? (
+  		<RecipeFoundation temperatureUnit={temperatureUnit} controllerId={selectedControllerId} />
+	) : null}
     </main>
   );
 }
