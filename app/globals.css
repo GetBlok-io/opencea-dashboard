@@ -243,3 +243,80 @@ button.toggle.active { background: var(--accent); color: #04111d; }
   .recipe-climate-matrix .climate-matrix-header span, .recipe-climate-matrix .climate-matrix-header strong, .recipe-climate-matrix .climate-matrix-row span { font-size: 0.72rem; }
   .recipe-climate-matrix .climate-matrix-row strong { font-size: 0.82rem; }
 }
+
+.alerts-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.alert-action-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.alert-action-row span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.alerts-table {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.alerts-table-header,
+.alerts-table-row {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 0.8fr 0.8fr 1.8fr 1.2fr 1fr 1.2fr;
+  min-width: 860px;
+}
+
+.alerts-table-header {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.alerts-table-row {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.7rem 0.8rem;
+}
+
+.alert-status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  justify-content: center;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.55rem;
+  text-transform: uppercase;
+}
+
+.alert-status-active {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
+.alert-status-pending {
+  border-color: rgba(251, 191, 36, 0.5);
+  color: #fde68a;
+}
+
+.alert-status-resolved {
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #bbf7d0;
+}

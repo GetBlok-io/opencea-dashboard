@@ -16,7 +16,7 @@ type TemperatureUnit = "C" | "F";
 type HistoryHours = 1 | 6 | 12 | 24;
 type ZoneName = "Container" | "Nursery" | "Cultivation";
 type MetricRow = "primary" | "secondary" | "other";
-type AppSection = "monitoring" | "control" | "recipe";
+type AppSection = "monitoring" | "control" | "recipe" | "alerts";
 
 type ModuleListEntry = {
   alias_key: string;
@@ -71,6 +71,69 @@ type HistoryApiResponse = {
   count?: number;
   generated_at?: string;
   data?: HistoryPoint[];
+  error?: string;
+};
+
+type AlertEventRow = {
+  id: string;
+  alert_rule_id: string;
+  rule_name: string;
+  priority: string;
+  source_type: string;
+  metric_key: string;
+  farm_controller_id: string | null;
+  farm_name: string | null;
+  status: string;
+  first_triggered_at: string;
+  last_triggered_at: string;
+  active_at: string | null;
+  resolved_at: string | null;
+  acknowledged_at: string | null;
+  latest_value: unknown;
+  context_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+type AlertRuleRow = {
+  id: string;
+  farm_controller_id: string | null;
+  farm_name: string | null;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  source_type: string;
+  metric_key: string;
+  condition_json: Record<string, unknown>;
+  soak_seconds: number;
+  notification_delay_seconds: number;
+  cooldown_seconds: number;
+  priority: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type AlertEventsApiResponse = {
+  ok: boolean;
+  count?: number;
+  generated_at?: string;
+  data?: AlertEventRow[];
+  error?: string;
+};
+
+type AlertRulesApiResponse = {
+  ok: boolean;
+  count?: number;
+  generated_at?: string;
+  data?: AlertRuleRow[];
+  error?: string;
+};
+
+type AlertEvaluateApiResponse = {
+  ok: boolean;
+  generated_at?: string;
+  evaluated?: number;
+  results?: unknown[];
   error?: string;
 };
 
@@ -361,6 +424,35 @@ function formatDate(value: string | null) {
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(new Date(value));
+}
+
+function formatShortDate(value: string | null) {
+  if (!value) return "—";
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatAlertValue(value: unknown) {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "number") return Number.isInteger(value) ? value.toString() : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return JSON.stringify(value);
+}
+
+function alertStatusClass(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized === "active") return "alert-status alert-status-active";
+  if (normalized === "pending") return "alert-status alert-status-pending";
+  if (normalized === "resolved") return "alert-status alert-status-resolved";
+  return "alert-status";
+}
+
+function priorityLabel(priority: string) {
+  return priority ? priority.toUpperCase() : "UNKNOWN";
 }
 
 function getMetricRow(metric: Metric): MetricRow {
@@ -712,6 +804,156 @@ function ControlZoneSection({ group }: { group: ZoneGroup }) {
   );
 }
 
+
+function AlertsFoundation({
+  events,
+  rules,
+  loading,
+  error,
+  lastEvaluatedAt,
+  onEvaluate,
+  onRefresh,
+}: {
+  events: AlertEventRow[];
+  rules: AlertRuleRow[];
+  loading: boolean;
+  error: string | null;
+  lastEvaluatedAt: string | null;
+  onEvaluate: () => void;
+  onRefresh: () => void;
+}) {
+  const activeEvents = events.filter((event) => event.status === "active" || event.status === "pending");
+  const recentEvents = events.filter((event) => event.status !== "active" && event.status !== "pending");
+
+  return (
+    <section className="alerts-section">
+      <article className="foundation-card control-note">
+        <p className="zone-kicker">Alerts</p>
+        <h2>Telemetry alerting foundation</h2>
+        <p>
+          Alert rules are evaluated server-side against farm telemetry. This MVP displays rule status and event lifecycle
+          before notification channels are connected.
+        </p>
+        <div className="alert-action-row">
+          <button onClick={onEvaluate} disabled={loading} type="button">
+            {loading ? "Evaluating..." : "Evaluate alerts"}
+          </button>
+          <button onClick={onRefresh} disabled={loading} type="button">
+            Refresh alerts
+          </button>
+          <span>Last evaluated: {formatShortDate(lastEvaluatedAt)}</span>
+        </div>
+        {error ? <div className="error-box">{error}</div> : null}
+      </article>
+
+      <article className="monitoring-zone-panel">
+        <div className="zone-card-header">
+          <div>
+            <p className="zone-kicker">Events</p>
+            <h2>Active alerts</h2>
+          </div>
+          <span className="metric-count">{activeEvents.length} open</span>
+        </div>
+
+        {activeEvents.length > 0 ? (
+          <div className="alerts-table">
+            <div className="alerts-table-header">
+              <span>Status</span>
+              <span>Priority</span>
+              <span>Rule</span>
+              <span>Farm</span>
+              <span>Value</span>
+              <span>Last triggered</span>
+            </div>
+            {activeEvents.map((event) => (
+              <div className="alerts-table-row" key={event.id}>
+                <span className={alertStatusClass(event.status)}>{event.status}</span>
+                <strong>{priorityLabel(event.priority)}</strong>
+                <span>{event.rule_name}</span>
+                <span>{event.farm_name ?? event.farm_controller_id ?? "All farms"}</span>
+                <span>{formatAlertValue(event.latest_value)}</span>
+                <span>{formatShortDate(event.last_triggered_at)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-zone">No active or pending alerts.</div>
+        )}
+      </article>
+
+      <article className="monitoring-zone-panel">
+        <div className="zone-card-header">
+          <div>
+            <p className="zone-kicker">History</p>
+            <h2>Recent alert events</h2>
+          </div>
+          <span className="metric-count">{recentEvents.length} recent</span>
+        </div>
+
+        {recentEvents.length > 0 ? (
+          <div className="alerts-table">
+            <div className="alerts-table-header">
+              <span>Status</span>
+              <span>Priority</span>
+              <span>Rule</span>
+              <span>Farm</span>
+              <span>Value</span>
+              <span>Resolved</span>
+            </div>
+            {recentEvents.map((event) => (
+              <div className="alerts-table-row" key={event.id}>
+                <span className={alertStatusClass(event.status)}>{event.status}</span>
+                <strong>{priorityLabel(event.priority)}</strong>
+                <span>{event.rule_name}</span>
+                <span>{event.farm_name ?? event.farm_controller_id ?? "All farms"}</span>
+                <span>{formatAlertValue(event.latest_value)}</span>
+                <span>{formatShortDate(event.resolved_at)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-zone">No resolved alert events yet.</div>
+        )}
+      </article>
+
+      <article className="monitoring-zone-panel">
+        <div className="zone-card-header">
+          <div>
+            <p className="zone-kicker">Rules</p>
+            <h2>Configured alert rules</h2>
+          </div>
+          <span className="metric-count">{rules.length} rules</span>
+        </div>
+
+        {rules.length > 0 ? (
+          <div className="alerts-table">
+            <div className="alerts-table-header">
+              <span>Enabled</span>
+              <span>Priority</span>
+              <span>Name</span>
+              <span>Farm</span>
+              <span>Metric</span>
+              <span>Soak</span>
+            </div>
+            {rules.map((rule) => (
+              <div className="alerts-table-row" key={rule.id}>
+                <span className={rule.enabled ? "alert-status alert-status-active" : "alert-status"}>{rule.enabled ? "enabled" : "disabled"}</span>
+                <strong>{priorityLabel(rule.priority)}</strong>
+                <span>{rule.name}</span>
+                <span>{rule.farm_name ?? rule.farm_controller_id ?? "All farms"}</span>
+                <span>{rule.metric_key}</span>
+                <span>{rule.soak_seconds}s</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-zone">No alert rules configured.</div>
+        )}
+      </article>
+    </section>
+  );
+}
+
 function ControlFoundation({ zoneGroups }: { zoneGroups: ZoneGroup[] }) {
   return (
     <section className="control-section">
@@ -763,6 +1005,66 @@ export default function Dashboard({
   const [loading, setLoading] = useState(false);
   const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>(readStoredTemperatureUnit);
   const [activeSection, setActiveSection] = useState<AppSection>("monitoring");
+  const [alertEvents, setAlertEvents] = useState<AlertEventRow[]>([]);
+  const [alertRules, setAlertRules] = useState<AlertRuleRow[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [lastAlertEvaluation, setLastAlertEvaluation] = useState<string | null>(null);
+
+  const refreshAlerts = useCallback(async (showLoading = true) => {
+    if (showLoading) setAlertsLoading(true);
+    setAlertsError(null);
+
+    try {
+      const [eventsResponse, rulesResponse] = await Promise.all([
+        fetch("/api/alerts/events", { cache: "no-store" }),
+        fetch("/api/alerts/rules", { cache: "no-store" }),
+      ]);
+
+      const eventsPayload = (await eventsResponse.json()) as AlertEventsApiResponse;
+      const rulesPayload = (await rulesResponse.json()) as AlertRulesApiResponse;
+
+      if (!eventsResponse.ok || !eventsPayload.ok) {
+        throw new Error(eventsPayload.error ?? "Failed to load alert events.");
+      }
+
+      if (!rulesResponse.ok || !rulesPayload.ok) {
+        throw new Error(rulesPayload.error ?? "Failed to load alert rules.");
+      }
+
+      setAlertEvents(eventsPayload.data ?? []);
+      setAlertRules(rulesPayload.data ?? []);
+    } catch (err) {
+      setAlertsError(err instanceof Error ? err.message : "Unknown alert loading error");
+    } finally {
+      if (showLoading) setAlertsLoading(false);
+    }
+  }, []);
+
+  const evaluateAlertsNow = useCallback(async () => {
+    setAlertsLoading(true);
+    setAlertsError(null);
+
+    try {
+      const response = await fetch("/api/alerts/evaluate", {
+        method: "POST",
+        cache: "no-store",
+      });
+
+      const payload = (await response.json()) as AlertEvaluateApiResponse;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? "Failed to evaluate alerts.");
+      }
+
+      setLastAlertEvaluation(payload.generated_at ?? new Date().toISOString());
+      await refreshAlerts(false);
+    } catch (err) {
+      setAlertsError(err instanceof Error ? err.message : "Unknown alert evaluation error");
+    } finally {
+      setAlertsLoading(false);
+    }
+  }, [refreshAlerts]);
 
 const refresh = useCallback(async (showLoading = true, controllerId = selectedControllerId) => {
     if (showLoading) setLoading(true);
@@ -842,6 +1144,12 @@ const refresh = useCallback(async (showLoading = true, controllerId = selectedCo
     const interval = window.setInterval(checkForNewData, LIVE_CHECK_SECONDS * 1000);
     return () => window.clearInterval(interval);
   }, [latestScrapedAt, refresh, selectedControllerId]);
+
+  useEffect(() => {
+    if (activeSection === "alerts") {
+      void refreshAlerts(false);
+    }
+  }, [activeSection, refreshAlerts]);
 
   const connectedRows = useMemo(() => {
     const explicitlyConnectedRows = rows.filter((row) => row.connected === true);
@@ -926,6 +1234,13 @@ const refresh = useCallback(async (showLoading = true, controllerId = selectedCo
             >
               Recipe
             </button>
+            <button
+              className={activeSection === "alerts" ? "toggle active" : "toggle"}
+              onClick={() => setActiveSection("alerts")}
+              type="button"
+            >
+              Alerts
+            </button>
           </div>
 
           <div className="toggle-group" aria-label="Temperature unit">
@@ -996,6 +1311,18 @@ const refresh = useCallback(async (showLoading = true, controllerId = selectedCo
 
       {activeSection === "recipe" ? (
         <RecipeFoundation temperatureUnit={temperatureUnit} controllerId={selectedControllerId} />
+      ) : null}
+
+      {activeSection === "alerts" ? (
+        <AlertsFoundation
+          events={alertEvents}
+          rules={alertRules}
+          loading={alertsLoading}
+          error={alertsError}
+          lastEvaluatedAt={lastAlertEvaluation}
+          onEvaluate={evaluateAlertsNow}
+          onRefresh={() => refreshAlerts(true)}
+        />
       ) : null}
     </main>
   );
