@@ -172,6 +172,8 @@ const CHARTS: ChartDefinition[] = [
   { aliasKey: "cultivation_ec", title: "Cultivation EC", subtitle: "Nutrient strength", unit: "µS/cm", zone: "Cultivation", kind: "number" },
   { aliasKey: "cultivation_water_temperature", title: "Cultivation Water Temperature", subtitle: "Tank water temperature", unit: "°C", zone: "Cultivation", kind: "temperature" },
   { aliasKey: "cultivation_tank_depth", title: "Cultivation Tank Depth", subtitle: "Tank depth", unit: "%", zone: "Cultivation", kind: "percent" },
+  { aliasKey: "cultivation_left_send_pressure", title: "Left Send Pressure", subtitle: "Cultivation feed pressure", unit: "%", zone: "Cultivation", kind: "percent" },
+  { aliasKey: "cultivation_right_send_pressure", title: "Right Send Pressure", subtitle: "Cultivation feed pressure", unit: "%", zone: "Cultivation", kind: "percent" },
 ];
 
 const CONTAINER_PRIMARY_ALIASES = new Set(["air_temperature", "relative_humidity", "co2"]);
@@ -410,9 +412,10 @@ function buildZoneGroups(rows: ReportedStateRow[]): ZoneGroup[] {
   const zoneMap = new Map<ZoneName, Metric[]>();
   for (const zone of ZONES) zoneMap.set(zone, []);
 
-  const connectedRows = rows.filter((row) => row.connected === true);
+  const explicitlyConnectedRows = rows.filter((row) => row.connected === true);
+  const displayRows = explicitlyConnectedRows.length > 0 ? explicitlyConnectedRows : rows;
 
-  for (const row of connectedRows) {
+  for (const row of displayRows) {
     const mappingsByIo = new Map<string, ModuleListEntry[]>();
 
     for (const mapping of row.module_mappings ?? []) {
@@ -825,7 +828,10 @@ export default function Dashboard({ initialRows, selectedControllerId }: Dashboa
     return () => window.clearInterval(interval);
   }, [latestScrapedAt, refresh, selectedControllerId]);
 
-  const connectedRows = useMemo(() => rows.filter((row) => row.connected === true), [rows]);
+  const connectedRows = useMemo(() => {
+    const explicitlyConnectedRows = rows.filter((row) => row.connected === true);
+    return explicitlyConnectedRows.length > 0 ? explicitlyConnectedRows : rows;
+  }, [rows]);
   const zoneGroups = useMemo(() => buildZoneGroups(connectedRows), [connectedRows]);
 
   const summary = useMemo(() => {
@@ -870,9 +876,9 @@ export default function Dashboard({ initialRows, selectedControllerId }: Dashboa
               </button>
             ))}
           </div>
-          <button onClick={refresh} disabled={loading} type="button">
-            {loading ? "Refreshing..." : "Refresh now"}
-          </button>
+	  <button onClick={() => refresh(true)} disabled={loading} type="button">
+  		{loading ? "Refreshing..." : "Refresh now"}
+	  </button>
         </div>
       </section>
 
