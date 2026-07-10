@@ -1,3 +1,4 @@
+import { getFarmModuleMappings } from "./farmConfigModules";
 import { pool } from "./db";
 import { FarmSelection, reportedStateFarmFilterSql } from "./farms";
 
@@ -125,8 +126,20 @@ export async function getLatestReportedState(selection?: FarmSelection): Promise
   `;
 
   const result = await pool.query(sql, [selection?.controllerId ?? null, selection?.groupId ?? null]);
-  return result.rows;
-}
+  const rows = result.rows as ReportedStateRow[];
+
+  const snapshotMappings = await getFarmModuleMappings(selection);
+  if (snapshotMappings.size === 0) return rows;
+
+  return rows.map((row) => {
+  if (row.module_mappings && row.module_mappings.length > 0) return row;
+
+  return {
+    ...row,
+    module_mappings: snapshotMappings.get(row.device_id) ?? [],
+  };
+  });
+ }
 
 export async function getLatestReportedStateScrapedAt(selection?: FarmSelection): Promise<string | null> {
   const farmFilter = await reportedStateFarmFilterSql("rs");
