@@ -331,7 +331,13 @@ function SafetySummary({ rules, actions, modes }: { rules: Record<string, unknow
   );
 }
 
-export default function RecipeDashboard({ temperatureUnit = "C" }: { temperatureUnit?: TemperatureUnit }) {
+export default function RecipeDashboard({
+  temperatureUnit = "C",
+  controllerId = null,
+}: {
+  temperatureUnit?: TemperatureUnit;
+  controllerId?: string | null;
+}) {
   const [payload, setPayload] = useState<RecipeApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -343,7 +349,8 @@ export default function RecipeDashboard({ temperatureUnit = "C" }: { temperature
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch("/api/recipe/current", { cache: "no-store" });
+	const farmQuery = controllerId ? `?controller_id=${encodeURIComponent(controllerId)}` : "";
+	const response = await fetch(`/api/recipe/current${farmQuery}`, { cache: "no-store" });
         const nextPayload = (await response.json()) as RecipeApiResponse;
         if (!response.ok || !nextPayload.ok) {
           throw new Error(nextPayload.error ?? "Failed to load recipe configuration.");
@@ -360,7 +367,7 @@ export default function RecipeDashboard({ temperatureUnit = "C" }: { temperature
     return () => {
       active = false;
     };
-  }, []);
+  }, [controllerId]);
 
   const parsed = useMemo(() => {
     const configs = payload?.configs ?? {};
