@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS alert_events (
   active_at TIMESTAMPTZ NULL,
   resolved_at TIMESTAMPTZ NULL,
   acknowledged_at TIMESTAMPTZ NULL,
+  suppressed_until TIMESTAMPTZ NULL,
   latest_value JSONB NULL,
   context_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -53,7 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_alert_events_farm_status
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_events_one_open_per_rule
   ON alert_events (alert_rule_id)
-  WHERE status IN ('pending', 'active');
+  WHERE status IN ('pending', 'active', 'suppressed');
 
 CREATE TABLE IF NOT EXISTS alert_notifications (
   id BIGSERIAL PRIMARY KEY,

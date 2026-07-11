@@ -90,7 +90,7 @@ async function upsertAlertEvent(result: AlertEvaluationResult) {
       SELECT *
       FROM alert_events
       WHERE alert_rule_id = $1
-        AND status IN ('pending', 'active')
+        AND status IN ('pending', 'active', 'suppressed')
       ORDER BY created_at DESC
       LIMIT 1;
     `,
@@ -107,6 +107,7 @@ async function upsertAlertEvent(result: AlertEvaluationResult) {
           SET
             status = 'resolved',
             resolved_at = NOW(),
+            suppressed_until = NULL,
             latest_value = $2::jsonb,
             context_json = $3::jsonb,
             updated_at = NOW()
@@ -164,6 +165,63 @@ async function upsertAlertEvent(result: AlertEvaluationResult) {
       action: "created",
       eventId: insertResult.rows[0]?.id,
       status: insertResult.rows[0]?.status,
+    };
+  }
+
+  const now = new Date();
+  const suppressedUntil = openEvent.suppressed_until ? new Date(openEvent.suppressed_until) : null;
+
+  if (openEvent.status === "suppressed" && suppressedUntil && suppressedUntil > now) {
+    await pool.query(
+      `
+        UPDATE alert_events
+        SET
+          last_triggered_at = NOW(),
+          latest_value = $2::jsonb,
+          context_json = $3::jsonb,
+          updated_at = NOW()
+        WHERE id = $1;
+      `,
+      [
+        openEvent.id,
+        JSON.stringify(jsonValue(value)),
+        JSON.stringify({ facts }),
+      ],
+    );
+
+    return {
+      action: "suppressed",
+      eventId: openEvent.id,
+      status: "suppressed",
+      suppressedUntil: openEvent.suppressed_until,
+    };
+  }
+
+  if (openEvent.status === "suppressed") {
+    await pool.query(
+      `
+        UPDATE alert_events
+        SET
+          status = 'active',
+          active_at = COALESCE(active_at, NOW()),
+          suppressed_until = NULL,
+          last_triggered_at = NOW(),
+          latest_value = $2::jsonb,
+          context_json = $3::jsonb,
+          updated_at = NOW()
+        WHERE id = $1;
+      `,
+      [
+        openEvent.id,
+        JSON.stringify(jsonValue(value)),
+        JSON.stringify({ facts }),
+      ],
+    );
+
+    return {
+      action: "reactivated",
+      eventId: openEvent.id,
+      status: "active",
     };
   }
 
