@@ -89,6 +89,7 @@ type AlertEventRow = {
   active_at: string | null;
   resolved_at: string | null;
   acknowledged_at: string | null;
+  suppressed_until: string | null;
   latest_value: unknown;
   context_json: Record<string, unknown>;
   created_at: string;
@@ -191,6 +192,13 @@ type AlertUpdateRuleApiResponse = {
   ok: boolean;
   generated_at?: string;
   data?: AlertRuleRow;
+  error?: string;
+};
+
+type AlertEventActionApiResponse = {
+  ok: boolean;
+  generated_at?: string;
+  data?: AlertEventRow;
   error?: string;
 };
 
@@ -1382,6 +1390,69 @@ function AlertsFoundation({
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const editingRule = rules.find((rule) => rule.id === editingRuleId) ?? null;
 
+  async function updateAlertEvent(
+    event: AlertEventRow,
+    action: "acknowledge" | "resolve" | "suppress" | "unsuppress",
+    suppressMinutes?: number,
+  ) {
+    try {
+      const response = await fetch(`/api/alerts/events/${event.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          action,
+          ...(suppressMinutes ? { suppress_minutes: suppressMinutes } : {}),
+        }),
+      });
+
+      const payload = (await response.json()) as AlertEventActionApiResponse;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? "Failed to update alert event.");
+      }
+
+      onRefresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Unknown alert event update error");
+    }
+  }
+
+  async function suppressAlertEvent(event: AlertEventRow) {
+    const answer = window.prompt(
+      "Suppress this alert for how long?\n\nEnter one of: 1h, 12h, 24h\nOr enter minutes, such as 60.",
+      "1h",
+    );
+
+    if (!answer) {
+      return;
+    }
+
+    const normalized = answer.trim().toLowerCase();
+    const suppressMinutesByLabel: Record<string, number> = {
+      "1h": 60,
+      "1hr": 60,
+      "1 hour": 60,
+      "12h": 720,
+      "12hr": 720,
+      "12 hours": 720,
+      "24h": 1440,
+      "24hr": 1440,
+      "24 hours": 1440,
+    };
+
+    const suppressMinutes = suppressMinutesByLabel[normalized] ?? Number(normalized);
+
+    if (!Number.isInteger(suppressMinutes) || suppressMinutes <= 0) {
+      window.alert("Enter a valid suppression duration, such as 1h, 12h, 24h, or 60.");
+      return;
+    }
+
+    await updateAlertEvent(event, "suppress", suppressMinutes);
+  }
+
   async function toggleRuleEnabled(rule: AlertRuleRow) {
     try {
       const response = await fetch(`/api/alerts/rules/${rule.id}`, {
@@ -1463,7 +1534,9 @@ function AlertsFoundation({
 
         {activeEvents.length > 0 ? (
           <div className="alerts-table">
-            <div className="alerts-table-header">
+            <div className="alerts-table-header active-alerts-header">
+              <span>ID</span>
+              <span>Actions</span>
               <span>Status</span>
               <span>Priority</span>
               <span>Rule</span>
@@ -1472,7 +1545,37 @@ function AlertsFoundation({
               <span>Last triggered</span>
             </div>
             {activeEvents.map((event) => (
-              <div className="alerts-table-row" key={event.id}>
+              <div className="alerts-table-row active-alerts-row" key={event.id}>
+                <span className="record-id">#{event.id}</span>
+                <span className="rule-action-buttons compact-rule-actions">
+                  <button
+                    type="button"
+                    className="icon-button ack-icon-button"
+                    onClick={() => void updateAlertEvent(event, "acknowledge")}
+                    title="Acknowledge alert"
+                    aria-label={`Acknowledge ${event.rule_name}`}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button suppress-icon-button"
+                    onClick={() => void suppressAlertEvent(event)}
+                    title="Suppress alert"
+                    aria-label={`Suppress ${event.rule_name}`}
+                  >
+                    ⏸
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button resolve-icon-button"
+                    onClick={() => void updateAlertEvent(event, "resolve")}
+                    title="Resolve alert"
+                    aria-label={`Resolve ${event.rule_name}`}
+                  >
+                    ↵
+                  </button>
+                </span>
                 <span className={alertStatusClass(event.status)}>{event.status}</span>
                 <strong>{priorityLabel(event.priority)}</strong>
                 <span>{event.rule_name}</span>
@@ -1498,21 +1601,41 @@ function AlertsFoundation({
 
         {recentEvents.length > 0 ? (
           <div className="alerts-table">
-            <div className="alerts-table-header">
+            <div className="alerts-table-header recent-events-header">
+              <span>ID</span>
+              <span>Actions</span>
               <span>Status</span>
               <span>Priority</span>
               <span>Rule</span>
               <span>Farm</span>
               <span>Value</span>
+              <span>Suppressed until</span>
               <span>Resolved</span>
             </div>
             {recentEvents.map((event) => (
-              <div className="alerts-table-row" key={event.id}>
+              <div className="alerts-table-row recent-events-row" key={event.id}>
+                <span className="record-id">#{event.id}</span>
+                <span className="rule-action-buttons compact-rule-actions">
+                  {event.status === "suppressed" ? (
+                    <button
+                      type="button"
+                      className="icon-button unsuppress-icon-button"
+                      onClick={() => void updateAlertEvent(event, "unsuppress")}
+                      title="Unsuppress alert"
+                      aria-label={`Unsuppress ${event.rule_name}`}
+                    >
+                      ↻
+                    </button>
+                  ) : (
+                    <span className="muted-action-placeholder">—</span>
+                  )}
+                </span>
                 <span className={alertStatusClass(event.status)}>{event.status}</span>
                 <strong>{priorityLabel(event.priority)}</strong>
                 <span>{event.rule_name}</span>
                 <span>{event.farm_name ?? event.farm_controller_id ?? "All farms"}</span>
                 <span>{formatAlertValue(event.latest_value)}</span>
+                <span>{formatShortDate(event.suppressed_until)}</span>
                 <span>{formatShortDate(event.resolved_at)}</span>
               </div>
             ))}
@@ -1535,6 +1658,7 @@ function AlertsFoundation({
           <div className="alerts-table rules-table">
             <div className="alerts-table-header">
               <span>Actions</span>
+              <span>ID</span>
               <span>Status</span>
               <span>Priority</span>
               <span>Name</span>
@@ -1574,6 +1698,7 @@ function AlertsFoundation({
                     ✕
                   </button>
                 </span>
+                <span className="record-id">#{rule.id}</span>
                 <span className={rule.enabled ? "alert-status alert-status-active" : "alert-status"}>{rule.enabled ? "enabled" : "disabled"}</span>
                 <strong>{priorityLabel(rule.priority)}</strong>
                 <span>{rule.name}</span>
