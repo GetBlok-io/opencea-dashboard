@@ -21,6 +21,7 @@ export async function GET() {
         ae.active_at,
         ae.resolved_at,
         ae.acknowledged_at,
+        ae.suppressed_until,
         ae.latest_value,
         ae.context_json,
         ae.created_at,
