@@ -187,6 +187,13 @@ type AlertRuleActionApiResponse = {
   error?: string;
 };
 
+type AlertUpdateRuleApiResponse = {
+  ok: boolean;
+  generated_at?: string;
+  data?: AlertRuleRow;
+  error?: string;
+};
+
 const ALERT_OPERATORS = [
   "greaterThan",
   "greaterThanInclusive",
@@ -530,6 +537,35 @@ function alertStatusClass(status: string) {
 
 function priorityLabel(priority: string) {
   return priority ? priority.toUpperCase() : "UNKNOWN";
+}
+
+function getSimpleAlertCondition(rule: AlertRuleRow) {
+  const all = Array.isArray(rule.condition_json?.all) ? rule.condition_json.all : [];
+  const condition = all[0];
+
+  if (!condition || typeof condition !== "object") {
+    return null;
+  }
+
+  const maybeCondition = condition as {
+    fact?: unknown;
+    operator?: unknown;
+    value?: unknown;
+  };
+
+  if (typeof maybeCondition.fact !== "string" || typeof maybeCondition.operator !== "string") {
+    return null;
+  }
+
+  return {
+    fact: maybeCondition.fact,
+    operator: maybeCondition.operator,
+    value: maybeCondition.value,
+  };
+}
+
+function getRuleRecipientIds(rule: AlertRuleRow) {
+  return (rule.recipients ?? []).map((recipient) => recipient.id);
 }
 
 function getMetricRow(metric: Metric): MetricRow {
@@ -883,6 +919,238 @@ function ControlZoneSection({ group }: { group: ZoneGroup }) {
 
 
 
+
+function EditAlertRuleForm({
+  rule,
+  farmOptions,
+  recipients,
+  onSaved,
+  onCancel,
+}: {
+  rule: AlertRuleRow;
+  farmOptions: FarmOption[];
+  recipients: AlertRecipientRow[];
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const simpleCondition = getSimpleAlertCondition(rule);
+  const [farmControllerId, setFarmControllerId] = useState<string>(rule.farm_controller_id ?? "");
+  const [name, setName] = useState(rule.name);
+  const [description, setDescription] = useState(rule.description ?? "");
+  const [metricKey, setMetricKey] = useState<string>(simpleCondition?.fact ?? rule.metric_key);
+  const [operator, setOperator] = useState<(typeof ALERT_OPERATORS)[number]>(
+    ALERT_OPERATORS.includes(simpleCondition?.operator as (typeof ALERT_OPERATORS)[number])
+      ? simpleCondition?.operator as (typeof ALERT_OPERATORS)[number]
+      : "lessThan",
+  );
+  const [threshold, setThreshold] = useState(
+    simpleCondition?.value === undefined || simpleCondition?.value === null ? "" : String(simpleCondition.value),
+  );
+  const [priority, setPriority] = useState<(typeof ALERT_PRIORITIES)[number]>(
+    ALERT_PRIORITIES.includes(rule.priority as (typeof ALERT_PRIORITIES)[number])
+      ? rule.priority as (typeof ALERT_PRIORITIES)[number]
+      : "warning",
+  );
+  const [soakSeconds, setSoakSeconds] = useState(String(rule.soak_seconds));
+  const [cooldownSeconds, setCooldownSeconds] = useState(String(rule.cooldown_seconds));
+  const [enabled, setEnabled] = useState(rule.enabled);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>(getRuleRecipientIds(rule));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggleRecipient(recipientId: string) {
+    setSelectedRecipientIds((current) => (
+      current.includes(recipientId)
+        ? current.filter((id) => id !== recipientId)
+        : [...current, recipientId]
+    ));
+  }
+
+  async function submitRule(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+
+    const numericThreshold = Number(threshold);
+    const numericSoak = Number(soakSeconds);
+    const numericCooldown = Number(cooldownSeconds);
+
+    if (!Number.isFinite(numericThreshold)) {
+      setError("Threshold must be a number.");
+      setSaving(false);
+      return;
+    }
+
+    if (!Number.isInteger(numericSoak) || numericSoak < 0 || !Number.isInteger(numericCooldown) || numericCooldown < 0) {
+      setError("Soak and cooldown must be non-negative whole seconds.");
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/alerts/rules/${rule.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          farm_controller_id: farmControllerId || null,
+          name,
+          description: description || null,
+          enabled,
+          source_type: "monitoring",
+          metric_key: metricKey,
+          condition_json: {
+            all: [
+              {
+                fact: metricKey,
+                operator,
+                value: numericThreshold,
+              },
+            ],
+          },
+          soak_seconds: numericSoak,
+          notification_delay_seconds: rule.notification_delay_seconds,
+          cooldown_seconds: numericCooldown,
+          priority,
+          recipient_ids: selectedRecipientIds,
+        }),
+      });
+
+      const payload = (await response.json()) as AlertUpdateRuleApiResponse;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? "Failed to update alert rule.");
+      }
+
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown update rule error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <article className="monitoring-zone-panel alert-edit-panel">
+      <div className="zone-card-header">
+        <div>
+          <p className="zone-kicker">Edit rule</p>
+          <h2>{rule.name}</h2>
+        </div>
+      </div>
+
+      {!simpleCondition ? (
+        <div className="error-box">
+          This rule uses a complex condition. This MVP editor supports single monitoring threshold rules only.
+        </div>
+      ) : null}
+
+      <form className="alert-rule-form" onSubmit={submitRule}>
+        <label>
+          <span>Farm</span>
+          <select value={farmControllerId} onChange={(event) => setFarmControllerId(event.target.value)}>
+            <option value="">All farms</option>
+            {farmOptions.map((farm) => (
+              <option key={farm.controller_id} value={farm.controller_id}>
+                {farm.label || farm.farm_name || farm.controller_id}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Rule name</span>
+          <input value={name} onChange={(event) => setName(event.target.value)} required />
+        </label>
+
+        <label>
+          <span>Description</span>
+          <input value={description} onChange={(event) => setDescription(event.target.value)} />
+        </label>
+
+        <label>
+          <span>Metric</span>
+          <select value={metricKey} onChange={(event) => setMetricKey(event.target.value)}>
+            {ALERT_METRIC_OPTIONS.map((metric) => (
+              <option key={metric} value={metric}>{metric}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Operator</span>
+          <select value={operator} onChange={(event) => setOperator(event.target.value as (typeof ALERT_OPERATORS)[number])}>
+            {ALERT_OPERATORS.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Threshold</span>
+          <input value={threshold} onChange={(event) => setThreshold(event.target.value)} inputMode="decimal" required />
+        </label>
+
+        <label>
+          <span>Priority</span>
+          <select value={priority} onChange={(event) => setPriority(event.target.value as (typeof ALERT_PRIORITIES)[number])}>
+            {ALERT_PRIORITIES.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Soak seconds</span>
+          <input value={soakSeconds} onChange={(event) => setSoakSeconds(event.target.value)} inputMode="numeric" required />
+        </label>
+
+        <label>
+          <span>Cooldown seconds</span>
+          <input value={cooldownSeconds} onChange={(event) => setCooldownSeconds(event.target.value)} inputMode="numeric" required />
+        </label>
+
+        <label className="alert-checkbox-label">
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+          <span>Enabled</span>
+        </label>
+
+        <div className="alert-recipient-picker">
+          <span>Recipients</span>
+          {recipients.length > 0 ? (
+            <div className="alert-recipient-options">
+              {recipients.map((recipient) => (
+                <label className="alert-checkbox-label" key={recipient.id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedRecipientIds.includes(recipient.id)}
+                    onChange={() => toggleRecipient(recipient.id)}
+                  />
+                  <span>{recipient.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <small>No recipients configured yet.</small>
+          )}
+        </div>
+
+        <div className="alert-form-actions">
+          <button type="submit" disabled={saving || !simpleCondition}>
+            {saving ? "Saving..." : "Save rule"}
+          </button>
+          <button type="button" onClick={onCancel} disabled={saving}>
+            Cancel
+          </button>
+          {error ? <span className="error-text">{error}</span> : null}
+        </div>
+      </form>
+    </article>
+  );
+}
+
 function CreateAlertRuleForm({
   farmOptions,
   recipients,
@@ -1111,6 +1379,8 @@ function AlertsFoundation({
 }) {
   const activeEvents = events.filter((event) => event.status === "active" || event.status === "pending");
   const recentEvents = events.filter((event) => event.status !== "active" && event.status !== "pending");
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const editingRule = rules.find((rule) => rule.id === editingRuleId) ?? null;
 
   async function toggleRuleEnabled(rule: AlertRuleRow) {
     try {
@@ -1278,6 +1548,15 @@ function AlertsFoundation({
                 <span className="rule-action-buttons compact-rule-actions">
                   <button
                     type="button"
+                    className="icon-button edit-icon-button"
+                    onClick={() => setEditingRuleId((current) => current === rule.id ? null : rule.id)}
+                    title="Edit rule"
+                    aria-label={`Edit ${rule.name}`}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
                     className={rule.enabled ? "icon-button enabled-icon-button" : "icon-button disabled-icon-button"}
                     onClick={() => void toggleRuleEnabled(rule)}
                     title={rule.enabled ? "Disable rule" : "Enable rule"}
@@ -1309,6 +1588,20 @@ function AlertsFoundation({
           <div className="empty-zone">No alert rules configured.</div>
         )}
       </article>
+
+      {editingRule ? (
+        <EditAlertRuleForm
+          key={editingRule.id}
+          rule={editingRule}
+          farmOptions={farmOptions}
+          recipients={recipients}
+          onSaved={() => {
+            setEditingRuleId(null);
+            onRefresh();
+          }}
+          onCancel={() => setEditingRuleId(null)}
+        />
+      ) : null}
     </section>
   );
 }
