@@ -137,6 +137,34 @@ type AlertRulesApiResponse = {
   error?: string;
 };
 
+type AlertRecipientChannel = {
+  id: string;
+  channel_type: string;
+  destination: string;
+  enabled: boolean;
+  priority_minimum: string;
+  quiet_hours_json?: Record<string, unknown> | null;
+};
+
+type AlertRecipientRow = {
+  id: string;
+  name: string;
+  recipient_type: string;
+  enabled: boolean;
+  notes: string | null;
+  channels: AlertRecipientChannel[];
+  created_at: string;
+  updated_at: string;
+};
+
+type AlertRecipientsApiResponse = {
+  ok: boolean;
+  count?: number;
+  generated_at?: string;
+  data?: AlertRecipientRow[];
+  error?: string;
+};
+
 type AlertEvaluateApiResponse = {
   ok: boolean;
   generated_at?: string;
@@ -144,6 +172,40 @@ type AlertEvaluateApiResponse = {
   results?: unknown[];
   error?: string;
 };
+
+type AlertCreateRuleApiResponse = {
+  ok: boolean;
+  generated_at?: string;
+  data?: AlertRuleRow;
+  error?: string;
+};
+
+const ALERT_OPERATORS = [
+  "greaterThan",
+  "greaterThanInclusive",
+  "lessThan",
+  "lessThanInclusive",
+  "equal",
+  "notEqual",
+] as const;
+
+const ALERT_PRIORITIES = ["info", "warning", "critical", "emergency"] as const;
+
+const ALERT_METRIC_OPTIONS = [
+  "air_temperature",
+  "relative_humidity",
+  "co2",
+  "nursery_ph",
+  "nursery_ec",
+  "nursery_water_temperature",
+  "nursery_tank_depth",
+  "cultivation_ph",
+  "cultivation_ec",
+  "cultivation_water_temperature",
+  "cultivation_tank_depth",
+  "cultivation_left_send_pressure",
+  "cultivation_right_send_pressure",
+] as const;
 
 type Metric = {
   id: string;
@@ -813,9 +875,217 @@ function ControlZoneSection({ group }: { group: ZoneGroup }) {
 }
 
 
+
+function CreateAlertRuleForm({
+  farmOptions,
+  recipients,
+  onCreated,
+}: {
+  farmOptions: FarmOption[];
+  recipients: AlertRecipientRow[];
+  onCreated: () => void;
+}) {
+  const [farmControllerId, setFarmControllerId] = useState<string>(farmOptions[0]?.controller_id ?? "");
+  const [name, setName] = useState("New monitoring alert");
+  const [metricKey, setMetricKey] = useState<string>("cultivation_ph");
+  const [operator, setOperator] = useState<(typeof ALERT_OPERATORS)[number]>("lessThan");
+  const [threshold, setThreshold] = useState("5.5");
+  const [priority, setPriority] = useState<(typeof ALERT_PRIORITIES)[number]>("warning");
+  const [soakSeconds, setSoakSeconds] = useState("300");
+  const [cooldownSeconds, setCooldownSeconds] = useState("1800");
+  const [enabled, setEnabled] = useState(true);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggleRecipient(recipientId: string) {
+    setSelectedRecipientIds((current) => (
+      current.includes(recipientId)
+        ? current.filter((id) => id !== recipientId)
+        : [...current, recipientId]
+    ));
+  }
+
+  async function submitRule(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+
+    const numericThreshold = Number(threshold);
+    const numericSoak = Number(soakSeconds);
+    const numericCooldown = Number(cooldownSeconds);
+
+    if (!Number.isFinite(numericThreshold)) {
+      setError("Threshold must be a number.");
+      setSaving(false);
+      return;
+    }
+
+    if (!Number.isInteger(numericSoak) || numericSoak < 0 || !Number.isInteger(numericCooldown) || numericCooldown < 0) {
+      setError("Soak and cooldown must be non-negative whole seconds.");
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/alerts/rules", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          farm_controller_id: farmControllerId || null,
+          name,
+          description: "Created from Alerts dashboard.",
+          enabled,
+          source_type: "monitoring",
+          metric_key: metricKey,
+          condition_json: {
+            all: [
+              {
+                fact: metricKey,
+                operator,
+                value: numericThreshold,
+              },
+            ],
+          },
+          soak_seconds: numericSoak,
+          notification_delay_seconds: 0,
+          cooldown_seconds: numericCooldown,
+          priority,
+          recipient_ids: selectedRecipientIds,
+        }),
+      });
+
+      const payload = (await response.json()) as AlertCreateRuleApiResponse;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? "Failed to create alert rule.");
+      }
+
+      setMessage(`Created rule ${payload.data?.id ?? ""}`.trim());
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown create rule error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <article className="monitoring-zone-panel">
+      <div className="zone-card-header">
+        <div>
+          <p className="zone-kicker">Create rule</p>
+          <h2>New monitoring threshold rule</h2>
+        </div>
+      </div>
+
+      <form className="alert-rule-form" onSubmit={submitRule}>
+        <label>
+          <span>Farm</span>
+          <select value={farmControllerId} onChange={(event) => setFarmControllerId(event.target.value)}>
+            <option value="">All farms</option>
+            {farmOptions.map((farm) => (
+              <option key={farm.controller_id} value={farm.controller_id}>
+                {farm.label || farm.farm_name || farm.controller_id}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Rule name</span>
+          <input value={name} onChange={(event) => setName(event.target.value)} required />
+        </label>
+
+        <label>
+          <span>Metric</span>
+          <select value={metricKey} onChange={(event) => setMetricKey(event.target.value)}>
+            {ALERT_METRIC_OPTIONS.map((metric) => (
+              <option key={metric} value={metric}>{metric}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Operator</span>
+          <select value={operator} onChange={(event) => setOperator(event.target.value as (typeof ALERT_OPERATORS)[number])}>
+            {ALERT_OPERATORS.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Threshold</span>
+          <input value={threshold} onChange={(event) => setThreshold(event.target.value)} inputMode="decimal" required />
+        </label>
+
+        <label>
+          <span>Priority</span>
+          <select value={priority} onChange={(event) => setPriority(event.target.value as (typeof ALERT_PRIORITIES)[number])}>
+            {ALERT_PRIORITIES.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Soak seconds</span>
+          <input value={soakSeconds} onChange={(event) => setSoakSeconds(event.target.value)} inputMode="numeric" required />
+        </label>
+
+        <label>
+          <span>Cooldown seconds</span>
+          <input value={cooldownSeconds} onChange={(event) => setCooldownSeconds(event.target.value)} inputMode="numeric" required />
+        </label>
+
+        <label className="alert-checkbox-label">
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+          <span>Enabled</span>
+        </label>
+
+        <div className="alert-recipient-picker">
+          <span>Recipients</span>
+          {recipients.length > 0 ? (
+            <div className="alert-recipient-options">
+              {recipients.map((recipient) => (
+                <label className="alert-checkbox-label" key={recipient.id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedRecipientIds.includes(recipient.id)}
+                    onChange={() => toggleRecipient(recipient.id)}
+                  />
+                  <span>{recipient.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <small>No recipients configured yet.</small>
+          )}
+        </div>
+
+        <div className="alert-form-actions">
+          <button type="submit" disabled={saving}>
+            {saving ? "Creating..." : "Create rule"}
+          </button>
+          {message ? <span className="success-text">{message}</span> : null}
+          {error ? <span className="error-text">{error}</span> : null}
+        </div>
+      </form>
+    </article>
+  );
+}
+
 function AlertsFoundation({
   events,
   rules,
+  recipients,
+  farmOptions,
   loading,
   error,
   lastEvaluatedAt,
@@ -824,6 +1094,8 @@ function AlertsFoundation({
 }: {
   events: AlertEventRow[];
   rules: AlertRuleRow[];
+  recipients: AlertRecipientRow[];
+  farmOptions: FarmOption[];
   loading: boolean;
   error: string | null;
   lastEvaluatedAt: string | null;
@@ -853,6 +1125,8 @@ function AlertsFoundation({
         </div>
         {error ? <div className="error-box">{error}</div> : null}
       </article>
+
+      <CreateAlertRuleForm farmOptions={farmOptions} recipients={recipients} onCreated={onRefresh} />
 
       <article className="monitoring-zone-panel">
         <div className="zone-card-header">
@@ -1017,6 +1291,7 @@ export default function Dashboard({
   const [activeSection, setActiveSection] = useState<AppSection>("monitoring");
   const [alertEvents, setAlertEvents] = useState<AlertEventRow[]>([]);
   const [alertRules, setAlertRules] = useState<AlertRuleRow[]>([]);
+  const [alertRecipients, setAlertRecipients] = useState<AlertRecipientRow[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [lastAlertEvaluation, setLastAlertEvaluation] = useState<string | null>(null);
@@ -1026,13 +1301,15 @@ export default function Dashboard({
     setAlertsError(null);
 
     try {
-      const [eventsResponse, rulesResponse] = await Promise.all([
+      const [eventsResponse, rulesResponse, recipientsResponse] = await Promise.all([
         fetch("/api/alerts/events", { cache: "no-store" }),
         fetch("/api/alerts/rules", { cache: "no-store" }),
+        fetch("/api/alerts/recipients", { cache: "no-store" }),
       ]);
 
       const eventsPayload = (await eventsResponse.json()) as AlertEventsApiResponse;
       const rulesPayload = (await rulesResponse.json()) as AlertRulesApiResponse;
+      const recipientsPayload = (await recipientsResponse.json()) as AlertRecipientsApiResponse;
 
       if (!eventsResponse.ok || !eventsPayload.ok) {
         throw new Error(eventsPayload.error ?? "Failed to load alert events.");
@@ -1042,8 +1319,13 @@ export default function Dashboard({
         throw new Error(rulesPayload.error ?? "Failed to load alert rules.");
       }
 
+      if (!recipientsResponse.ok || !recipientsPayload.ok) {
+        throw new Error(recipientsPayload.error ?? "Failed to load alert recipients.");
+      }
+
       setAlertEvents(eventsPayload.data ?? []);
       setAlertRules(rulesPayload.data ?? []);
+      setAlertRecipients(recipientsPayload.data ?? []);
     } catch (err) {
       setAlertsError(err instanceof Error ? err.message : "Unknown alert loading error");
     } finally {
@@ -1327,6 +1609,8 @@ const refresh = useCallback(async (showLoading = true, controllerId = selectedCo
         <AlertsFoundation
           events={alertEvents}
           rules={alertRules}
+          recipients={alertRecipients}
+          farmOptions={farmOptions}
           loading={alertsLoading}
           error={alertsError}
           lastEvaluatedAt={lastAlertEvaluation}
