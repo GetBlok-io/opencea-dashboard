@@ -58,6 +58,7 @@ export async function GET() {
         AND arr.enabled = true
       LEFT JOIN alert_recipients rec
         ON rec.id = arr.alert_recipient_id
+      WHERE ar.deleted_at IS NULL
       GROUP BY ar.id, fr.farm_name
       ORDER BY ar.enabled DESC, ar.priority DESC, ar.name ASC;
     `);

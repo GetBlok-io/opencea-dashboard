@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS alert_rules (
   cooldown_seconds INTEGER NOT NULL DEFAULT 1800 CHECK (cooldown_seconds >= 0),
   priority TEXT NOT NULL DEFAULT 'warning' CHECK (priority IN ('info', 'warning', 'critical', 'emergency')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled
@@ -24,6 +25,9 @@ CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled
 
 CREATE INDEX IF NOT EXISTS idx_alert_rules_farm_controller_id
   ON alert_rules (farm_controller_id);
+
+CREATE INDEX IF NOT EXISTS idx_alert_rules_deleted_at
+  ON alert_rules (deleted_at);
 
 CREATE TABLE IF NOT EXISTS alert_events (
   id BIGSERIAL PRIMARY KEY,

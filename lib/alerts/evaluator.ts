@@ -51,7 +51,7 @@ async function loadEnabledRules(): Promise<AlertRule[]> {
       cooldown_seconds,
       priority
     FROM alert_rules
-    WHERE enabled = true
+    WHERE enabled = true AND deleted_at IS NULL
     ORDER BY priority DESC, id ASC;
   `);
 

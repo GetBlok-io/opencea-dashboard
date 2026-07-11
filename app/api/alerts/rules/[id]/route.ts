@@ -68,6 +68,7 @@ export async function GET(_request: Request, context: RouteContext) {
         LEFT JOIN alert_recipients rec
           ON rec.id = arr.alert_recipient_id
         WHERE ar.id = $1
+          AND ar.deleted_at IS NULL
         GROUP BY ar.id, fr.farm_name;
       `,
       [id],
@@ -108,7 +109,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     await client.query("BEGIN");
 
     const currentResult = await client.query(
-      "SELECT * FROM alert_rules WHERE id = $1 FOR UPDATE;",
+      "SELECT * FROM alert_rules WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;",
       [id],
     );
 
@@ -230,5 +231,54 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   } finally {
     client.release();
+  }
+}
+
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  try {
+    const { id } = await context.params;
+
+    const result = await pool.query(
+      `
+        UPDATE alert_rules
+        SET
+          enabled = false,
+          deleted_at = NOW(),
+          updated_at = NOW()
+        WHERE id = $1
+          AND deleted_at IS NULL
+        RETURNING
+          id::text,
+          name,
+          enabled,
+          deleted_at,
+          updated_at;
+      `,
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "Alert rule not found" },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      generated_at: new Date().toISOString(),
+      data: result.rows[0],
+    });
+  } catch (error) {
+    console.error(error);
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : "Unknown alert rule delete error",
+      },
+      { status: 400 },
+    );
   }
 }
