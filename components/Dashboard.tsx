@@ -180,6 +180,13 @@ type AlertCreateRuleApiResponse = {
   error?: string;
 };
 
+type AlertRuleActionApiResponse = {
+  ok: boolean;
+  generated_at?: string;
+  data?: AlertRuleRow;
+  error?: string;
+};
+
 const ALERT_OPERATORS = [
   "greaterThan",
   "greaterThanInclusive",
@@ -1105,6 +1112,53 @@ function AlertsFoundation({
   const activeEvents = events.filter((event) => event.status === "active" || event.status === "pending");
   const recentEvents = events.filter((event) => event.status !== "active" && event.status !== "pending");
 
+  async function toggleRuleEnabled(rule: AlertRuleRow) {
+    try {
+      const response = await fetch(`/api/alerts/rules/${rule.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          enabled: !rule.enabled,
+        }),
+      });
+
+      const payload = (await response.json()) as AlertRuleActionApiResponse;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? "Failed to update rule.");
+      }
+
+      onRefresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Unknown rule update error");
+    }
+  }
+
+  async function deleteRule(rule: AlertRuleRow) {
+    const confirmed = window.confirm(`Delete alert rule "${rule.name}"? This will hide the rule but keep historical alert events.`);
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/alerts/rules/${rule.id}`, {
+        method: "DELETE",
+        cache: "no-store",
+      });
+
+      const payload = (await response.json()) as AlertRuleActionApiResponse;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? "Failed to delete rule.");
+      }
+
+      onRefresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Unknown rule delete error");
+    }
+  }
+
   return (
     <section className="alerts-section">
       <article className="foundation-card control-note">
@@ -1208,9 +1262,10 @@ function AlertsFoundation({
         </div>
 
         {rules.length > 0 ? (
-          <div className="alerts-table">
+          <div className="alerts-table rules-table">
             <div className="alerts-table-header">
-              <span>Enabled</span>
+              <span>Actions</span>
+              <span>Status</span>
               <span>Priority</span>
               <span>Name</span>
               <span>Farm</span>
@@ -1220,6 +1275,26 @@ function AlertsFoundation({
             </div>
             {rules.map((rule) => (
               <div className="alerts-table-row" key={rule.id}>
+                <span className="rule-action-buttons compact-rule-actions">
+                  <button
+                    type="button"
+                    className={rule.enabled ? "icon-button enabled-icon-button" : "icon-button disabled-icon-button"}
+                    onClick={() => void toggleRuleEnabled(rule)}
+                    title={rule.enabled ? "Disable rule" : "Enable rule"}
+                    aria-label={rule.enabled ? `Disable ${rule.name}` : `Enable ${rule.name}`}
+                  >
+                    {rule.enabled ? "●" : "○"}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button danger-icon-button"
+                    onClick={() => void deleteRule(rule)}
+                    title="Delete rule"
+                    aria-label={`Delete ${rule.name}`}
+                  >
+                    ✕
+                  </button>
+                </span>
                 <span className={rule.enabled ? "alert-status alert-status-active" : "alert-status"}>{rule.enabled ? "enabled" : "disabled"}</span>
                 <strong>{priorityLabel(rule.priority)}</strong>
                 <span>{rule.name}</span>
