@@ -1383,7 +1383,7 @@ function AlertsFoundation({
   error: string | null;
   lastEvaluatedAt: string | null;
   onEvaluate: () => void;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void>;
 }) {
   const activeEvents = events.filter((event) => event.status === "active" || event.status === "pending");
   const recentEvents = events.filter((event) => event.status !== "active" && event.status !== "pending");
@@ -1414,7 +1414,7 @@ function AlertsFoundation({
         throw new Error(payload.error ?? "Failed to update alert event.");
       }
 
-      onRefresh();
+      await onRefresh();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Unknown alert event update error");
     }
@@ -1472,7 +1472,7 @@ function AlertsFoundation({
         throw new Error(payload.error ?? "Failed to update rule.");
       }
 
-      onRefresh();
+      await onRefresh();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Unknown rule update error");
     }
@@ -1494,7 +1494,7 @@ function AlertsFoundation({
         throw new Error(payload.error ?? "Failed to delete rule.");
       }
 
-      onRefresh();
+      await onRefresh();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Unknown rule delete error");
     }
@@ -1521,7 +1521,7 @@ function AlertsFoundation({
         {error ? <div className="error-box">{error}</div> : null}
       </article>
 
-      <CreateAlertRuleForm farmOptions={farmOptions} recipients={recipients} onCreated={onRefresh} />
+      <CreateAlertRuleForm farmOptions={farmOptions} recipients={recipients} onCreated={() => void onRefresh()} />
 
       <article className="monitoring-zone-panel">
         <div className="zone-card-header">
@@ -1722,7 +1722,7 @@ function AlertsFoundation({
           recipients={recipients}
           onSaved={() => {
             setEditingRuleId(null);
-            onRefresh();
+            void onRefresh();
           }}
           onCancel={() => setEditingRuleId(null)}
         />
@@ -1931,9 +1931,17 @@ const refresh = useCallback(async (showLoading = true, controllerId = selectedCo
   }, [latestScrapedAt, refresh, selectedControllerId]);
 
   useEffect(() => {
-    if (activeSection === "alerts") {
-      void refreshAlerts(false);
+    if (activeSection !== "alerts") {
+      return;
     }
+
+    void refreshAlerts(false);
+
+    const interval = window.setInterval(() => {
+      void refreshAlerts(false);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
   }, [activeSection, refreshAlerts]);
 
   const connectedRows = useMemo(() => {
