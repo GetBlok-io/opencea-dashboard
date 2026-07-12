@@ -39,7 +39,7 @@ let isEvaluating = false;
 async function main() {
   const { evaluateAlerts } = await import("../lib/alerts/evaluator");
 
-  boss.on("error", (error) => {
+  boss.on("error", (error: unknown) => {
     console.error("[alerts-worker] pg-boss error:", error);
   });
 
@@ -47,9 +47,9 @@ async function main() {
 
   await boss.createQueue(JOB_NAME);
 
-  await boss.work(JOB_NAME, async (job) => {
+  await boss.work(JOB_NAME, async (job: { id?: string } | undefined) => {
     if (isEvaluating) {
-      console.log("[alerts-worker] Skipping overlapping evaluation job", job.id);
+      console.log("[alerts-worker] Skipping overlapping evaluation job", job?.id);
       return;
     }
 
