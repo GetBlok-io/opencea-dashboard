@@ -90,7 +90,7 @@ const oldSuppressButton = `                  <button
                     className="icon-button suppress-icon-button"
                     onClick={() => void suppressAlertEvent(event)}
                     title="Suppress alert"
-                    aria-label={\`Suppress ${event.rule_name}\`}
+                    aria-label={\`Suppress \${event.rule_name}\`}
                   >
                     ⏸
                   </button>`;
@@ -107,7 +107,7 @@ const newSuppressButton = `                  <span className="suppression-contro
                         }));
                       }}
                       title="Suppression duration"
-                      aria-label={\`Suppression duration for ${event.rule_name}\`}
+                      aria-label={\`Suppression duration for \${event.rule_name}\`}
                     >
                       {ALERT_SUPPRESSION_OPTIONS.map((option) => (
                         <option key={option.minutes} value={option.minutes}>
@@ -119,8 +119,8 @@ const newSuppressButton = `                  <span className="suppression-contro
                       type="button"
                       className="icon-button suppress-icon-button"
                       onClick={() => void suppressAlertEvent(event)}
-                      title={\`Suppress alert for ${selectedSuppressionMinutes(event.id) / 60} hour${selectedSuppressionMinutes(event.id) === 60 ? "" : "s"}\`}
-                      aria-label={\`Suppress ${event.rule_name}\`}
+                      title={\`Suppress alert for \${selectedSuppressionMinutes(event.id) / 60} hour\${selectedSuppressionMinutes(event.id) === 60 ? "" : "s"}\`}
+                      aria-label={\`Suppress \${event.rule_name}\`}
                     >
                       ⏸
                     </button>
