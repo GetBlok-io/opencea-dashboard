@@ -56,23 +56,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_events_one_open_per_rule
   ON alert_events (alert_rule_id)
   WHERE status IN ('pending', 'active', 'suppressed');
 
-CREATE TABLE IF NOT EXISTS alert_notifications (
-  id BIGSERIAL PRIMARY KEY,
-  alert_event_id BIGINT NOT NULL REFERENCES alert_events(id) ON DELETE CASCADE,
-  channel_type TEXT NOT NULL CHECK (channel_type IN ('email', 'sms', 'webhook', 'noop')),
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'suppressed')),
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-  last_attempt_at TIMESTAMPTZ NULL,
-  next_attempt_at TIMESTAMPTZ NULL,
-  provider_message_id TEXT NULL,
-  error_message TEXT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_alert_notifications_status
-  ON alert_notifications (status);
-
 CREATE TABLE IF NOT EXISTS alert_recipients (
   id BIGSERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -126,3 +109,40 @@ CREATE INDEX IF NOT EXISTS idx_alert_rule_recipients_recipient
 
 CREATE INDEX IF NOT EXISTS idx_alert_rule_recipients_enabled
   ON alert_rule_recipients (enabled);
+
+CREATE TABLE IF NOT EXISTS alert_notifications (
+  id BIGSERIAL PRIMARY KEY,
+  alert_event_id BIGINT NOT NULL REFERENCES alert_events(id) ON DELETE CASCADE,
+  alert_recipient_id BIGINT NULL REFERENCES alert_recipients(id) ON DELETE SET NULL,
+  alert_recipient_channel_id BIGINT NULL REFERENCES alert_recipient_channels(id) ON DELETE SET NULL,
+  channel_type TEXT NOT NULL CHECK (channel_type IN ('email', 'sms', 'webhook', 'noop')),
+  provider TEXT NULL,
+  destination TEXT NULL,
+  subject TEXT NULL,
+  body TEXT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'suppressed')),
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  last_attempt_at TIMESTAMPTZ NULL,
+  next_attempt_at TIMESTAMPTZ NULL,
+  provider_message_id TEXT NULL,
+  error_message TEXT NULL,
+  response_json JSONB NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_notifications_status
+  ON alert_notifications (status);
+
+CREATE INDEX IF NOT EXISTS idx_alert_notifications_event_channel
+  ON alert_notifications (alert_event_id, channel_type);
+
+CREATE INDEX IF NOT EXISTS idx_alert_notifications_recipient
+  ON alert_notifications (alert_recipient_id);
+
+CREATE INDEX IF NOT EXISTS idx_alert_notifications_recipient_channel
+  ON alert_notifications (alert_recipient_channel_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_notifications_one_per_event_channel
+  ON alert_notifications (alert_event_id, alert_recipient_channel_id, channel_type)
+  WHERE alert_recipient_channel_id IS NOT NULL;
