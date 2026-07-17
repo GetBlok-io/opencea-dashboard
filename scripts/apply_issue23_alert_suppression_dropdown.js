@@ -36,11 +36,26 @@ if (!source.includes("const ALERT_SUPPRESSION_OPTIONS = [")) {
 }
 
 if (!source.includes("const [suppressDurationByEventId, setSuppressDurationByEventId]")) {
-  patchSource(
-    '  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);\n  const editingRule = rules.find((rule) => rule.id === editingRuleId) ?? null;\n',
-    '  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);\n  const [suppressDurationByEventId, setSuppressDurationByEventId] = useState<Record<string, number>>({});\n  const editingRule = rules.find((rule) => rule.id === editingRuleId) ?? null;\n\n  function selectedSuppressionMinutes(eventId: string) {\n    return suppressDurationByEventId[eventId] ?? ALERT_SUPPRESSION_OPTIONS[0].minutes;\n  }\n',
+  const stateBlock =
+    '  const [suppressDurationByEventId, setSuppressDurationByEventId] = useState<Record<string, number>>({});\n';
+  const helperBlock =
+    '\n  function selectedSuppressionMinutes(eventId: string) {\n' +
+    '    return suppressDurationByEventId[eventId] ?? ALERT_SUPPRESSION_OPTIONS[0].minutes;\n' +
+    '  }\n';
+
+  const patchedState = patchRegex(
+    /(  const \[editingRuleId, setEditingRuleId\] = useState<string \| null>\(null\);\r?\n)(  const editingRule = rules\.find\(\(rule\) => rule\.id === editingRuleId\) \?\? null;\r?\n)/,
+    `$1${stateBlock}$2${helperBlock}`,
     "alert suppression duration state",
   );
+
+  if (!patchedState) {
+    patchRegex(
+      /(  const \[editingRuleId, setEditingRuleId\] = useState<string \| null>\(null\);\r?\n)/,
+      `$1${stateBlock}${helperBlock}`,
+      "alert suppression duration fallback state",
+    );
+  }
 } else {
   console.log("Alert suppression duration state already present.");
 }
@@ -93,7 +108,7 @@ const newSuppressControl = `                  <span className="suppression-contr
 
 if (!source.includes('className="suppression-control"')) {
   patchRegex(
-    /                  <button\n                    type="button"\n                    className="icon-button suppress-icon-button"\n                    onClick=\{\(\) => void suppressAlertEvent\(event\)\}\n                    title="Suppress alert"\n                    aria-label=\{`Suppress \$\{event\.rule_name\}`\}\n                  >\n                    ⏸\n                  <\/button>/,
+    /                  <button\r?\n                    type="button"\r?\n                    className="icon-button suppress-icon-button"\r?\n                    onClick=\{\(\) => void suppressAlertEvent\(event\)\}\r?\n                    title="Suppress alert"\r?\n                    aria-label=\{`Suppress \$\{event\.rule_name\}`\}\r?\n                  >\r?\n                    ⏸\r?\n                  <\/button>/,
     newSuppressControl,
     "suppress action dropdown",
   );
