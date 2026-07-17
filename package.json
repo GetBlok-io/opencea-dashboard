@@ -7,4 +7,30 @@
     "build": "node scripts/apply_monitoring_repair.js && next build",
     "start": "next start",
     "lint": "next lint || true",
-    "alerts:worker": "tsx -r tsconfig-paths/register scripts/alerts-worker
+    "alerts:worker": "tsx -r tsconfig-paths/register scripts/alerts-worker.ts"
+  },
+  "dependencies": {
+    "@types/pg": "^8.11.11",
+    "clicksend": "^5.1.7",
+    "json-rules-engine": "^7.3.1",
+    "next": "^15.1.6",
+    "pg": "^8.13.1",
+    "pg-boss": "^12.26.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-is": "^19.0.0",
+    "recharts": "^3.8.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "eslint": "^9.18.0",
+    "eslint-config-next": "^15.1.6",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10"
+  }
+}
