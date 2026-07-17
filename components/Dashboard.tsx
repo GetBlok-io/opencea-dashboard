@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import RecipeDashboard from "./RecipeDashboard";
+import AlertRecipientEditModal from "./AlertRecipientEditModal";
 
 type TemperatureUnit = "C" | "F";
 type HistoryHours = 1 | 6 | 12 | 24;
@@ -1394,6 +1395,7 @@ function AlertsFoundation({
   const activeEvents = events.filter((event) => event.status === "active" || event.status === "pending");
   const recentEvents = events.filter((event) => event.status !== "active" && event.status !== "pending");
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editingRecipientId, setEditingRecipientId] = useState<string | null>(null);
   const [suppressDurationByEventId, setSuppressDurationByEventId] = useState<Record<string, number>>({});
 
   function selectedSuppressionMinutes(eventId: string) {
@@ -1707,7 +1709,19 @@ function AlertsFoundation({
                 <span>{rule.name}</span>
                 <span>{rule.farm_name ?? rule.farm_controller_id ?? "All farms"}</span>
                 <span>{rule.metric_key}</span>
-                <span>{rule.recipients?.length ? rule.recipients.map((recipient) => recipient.name).join(", ") : "No recipients"}</span>
+                <span className="recipient-link-list">
+                  {rule.recipients?.length ? rule.recipients.map((recipient) => (
+                    <button
+                      type="button"
+                      className="recipient-link-button"
+                      key={recipient.id}
+                      onClick={() => setEditingRecipientId(recipient.id)}
+                      title={`Edit recipient ${recipient.name}`}
+                    >
+                      {recipient.name}
+                    </button>
+                  )) : "No recipients"}
+                </span>
                 <span>{rule.soak_seconds}s</span>
               </div>
             ))}
@@ -1728,6 +1742,18 @@ function AlertsFoundation({
             void onRefresh();
           }}
           onCancel={() => setEditingRuleId(null)}
+        />
+      ) : null}
+
+
+      {editingRecipientId ? (
+        <AlertRecipientEditModal
+          recipientId={editingRecipientId}
+          onSaved={() => {
+            setEditingRecipientId(null);
+            void onRefresh();
+          }}
+          onCancel={() => setEditingRecipientId(null)}
         />
       ) : null}
     </section>
