@@ -213,6 +213,12 @@ const ALERT_OPERATORS = [
 
 const ALERT_PRIORITIES = ["info", "warning", "critical", "emergency"] as const;
 
+const ALERT_SUPPRESSION_OPTIONS = [
+  { label: "1 hour", minutes: 60 },
+  { label: "12 hours", minutes: 720 },
+  { label: "24 hours", minutes: 1440 },
+] as const;
+
 const ALERT_METRIC_OPTIONS = [
   "air_temperature",
   "relative_humidity",
@@ -1388,6 +1394,11 @@ function AlertsFoundation({
   const activeEvents = events.filter((event) => event.status === "active" || event.status === "pending");
   const recentEvents = events.filter((event) => event.status !== "active" && event.status !== "pending");
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [suppressDurationByEventId, setSuppressDurationByEventId] = useState<Record<string, number>>({});
+
+  function selectedSuppressionMinutes(eventId: string) {
+    return suppressDurationByEventId[eventId] ?? ALERT_SUPPRESSION_OPTIONS[0].minutes;
+  }
   const editingRule = rules.find((rule) => rule.id === editingRuleId) ?? null;
 
   async function updateAlertEvent(
@@ -1421,36 +1432,7 @@ function AlertsFoundation({
   }
 
   async function suppressAlertEvent(event: AlertEventRow) {
-    const answer = window.prompt(
-      "Suppress this alert for how long?\n\nEnter one of: 1h, 12h, 24h\nOr enter minutes, such as 60.",
-      "1h",
-    );
-
-    if (!answer) {
-      return;
-    }
-
-    const normalized = answer.trim().toLowerCase();
-    const suppressMinutesByLabel: Record<string, number> = {
-      "1h": 60,
-      "1hr": 60,
-      "1 hour": 60,
-      "12h": 720,
-      "12hr": 720,
-      "12 hours": 720,
-      "24h": 1440,
-      "24hr": 1440,
-      "24 hours": 1440,
-    };
-
-    const suppressMinutes = suppressMinutesByLabel[normalized] ?? Number(normalized);
-
-    if (!Number.isInteger(suppressMinutes) || suppressMinutes <= 0) {
-      window.alert("Enter a valid suppression duration, such as 1h, 12h, 24h, or 60.");
-      return;
-    }
-
-    await updateAlertEvent(event, "suppress", suppressMinutes);
+    await updateAlertEvent(event, "suppress", selectedSuppressionMinutes(event.id));
   }
 
   async function toggleRuleEnabled(rule: AlertRuleRow) {
@@ -1557,15 +1539,36 @@ function AlertsFoundation({
                   >
                     ✓
                   </button>
-                  <button
-                    type="button"
-                    className="icon-button suppress-icon-button"
-                    onClick={() => void suppressAlertEvent(event)}
-                    title="Suppress alert"
-                    aria-label={`Suppress ${event.rule_name}`}
-                  >
-                    ⏸
-                  </button>
+                  <span className="suppression-control">
+                    <select
+                      className="suppression-select"
+                      value={selectedSuppressionMinutes(event.id)}
+                      onChange={(changeEvent) => {
+                        const nextMinutes = Number(changeEvent.target.value);
+                        setSuppressDurationByEventId((current) => ({
+                          ...current,
+                          [event.id]: nextMinutes,
+                        }));
+                      }}
+                      title="Suppression duration"
+                      aria-label={`Suppression duration for ${event.rule_name}`}
+                    >
+                      {ALERT_SUPPRESSION_OPTIONS.map((option) => (
+                        <option key={option.minutes} value={option.minutes}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="icon-button suppress-icon-button"
+                      onClick={() => void suppressAlertEvent(event)}
+                      title={`Suppress alert for ${selectedSuppressionMinutes(event.id) / 60} hour${selectedSuppressionMinutes(event.id) === 60 ? "" : "s"}`}
+                      aria-label={`Suppress ${event.rule_name}`}
+                    >
+                      ⏸
+                    </button>
+                  </span>
                   <button
                     type="button"
                     className="icon-button resolve-icon-button"

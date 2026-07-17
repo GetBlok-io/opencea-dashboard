@@ -498,3 +498,21 @@ button.toggle.active { background: var(--accent); color: #04111d; }
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+
+.suppression-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.suppression-select {
+  min-width: 5.6rem;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.7);
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
