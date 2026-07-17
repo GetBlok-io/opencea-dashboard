@@ -1,15 +1,17 @@
 import { pool } from "@/lib/db";
 import type { AlertRule } from "./types";
 
-type EmailRecipientChannel = {
+type AlertRecipientChannel = {
   recipient_id: string;
   recipient_name: string;
   channel_id: string;
+  channel_type: "email" | "sms";
   destination: string;
 };
 
 type AlertNotificationSendResult = {
   channelId: string;
+  channelType: "email" | "sms";
   destination: string;
   action: "sent" | "failed" | "skipped";
   notificationId?: string;
@@ -17,7 +19,7 @@ type AlertNotificationSendResult = {
   error?: string;
 };
 
-type AlertEmailContext = {
+type AlertNotificationContext = {
   event_id: string;
   farm_controller_id: string | null;
   farm_name: string | null;
@@ -33,6 +35,12 @@ type PrimaryCondition = {
   value?: unknown;
 };
 
+type AlertMessageContent = {
+  emailSubject: string;
+  emailBody: string;
+  smsBody: string;
+};
+
 const PRIORITY_WEIGHTS: Record<AlertRule["priority"], number> = {
   info: 25,
   warning: 50,
@@ -44,12 +52,12 @@ function priorityWeight(priority: string) {
   return PRIORITY_WEIGHTS[priority as AlertRule["priority"]] ?? 0;
 }
 
+function isClickSendConfigured() {
+  return Boolean(process.env.CLICKSEND_USERNAME && process.env.CLICKSEND_API_KEY);
+}
+
 function isEmailNotificationsConfigured() {
-  return Boolean(
-    process.env.CLICKSEND_USERNAME &&
-      process.env.CLICKSEND_API_KEY &&
-      process.env.CLICKSEND_EMAIL_FROM_ADDRESS_ID,
-  );
+  return Boolean(isClickSendConfigured() && process.env.CLICKSEND_EMAIL_FROM_ADDRESS_ID);
 }
 
 function clickSendAuthHeader() {
@@ -139,7 +147,7 @@ function findPrimaryCondition(rule: AlertRule): PrimaryCondition | null {
   };
 }
 
-async function loadAlertEmailContext(eventId: string): Promise<AlertEmailContext | null> {
+async function loadAlertNotificationContext(eventId: string): Promise<AlertNotificationContext | null> {
   const result = await pool.query(
     `
       SELECT
@@ -162,7 +170,7 @@ async function loadAlertEmailContext(eventId: string): Promise<AlertEmailContext
   return result.rows[0] ?? null;
 }
 
-function buildAlertEmail(rule: AlertRule, eventId: string, context: AlertEmailContext | null) {
+function buildAlertMessages(rule: AlertRule, context: AlertNotificationContext | null): AlertMessageContent {
   const dashboardUrl = appUrl();
   const farmControllerId = context?.farm_controller_id ?? rule.farm_controller_id ?? null;
   const farmName = context?.farm_name ?? farmControllerId ?? "All farms";
@@ -171,34 +179,50 @@ function buildAlertEmail(rule: AlertRule, eventId: string, context: AlertEmailCo
   const viewUrl = dashboardUrl ? normalizeDashboardUrl(dashboardUrl, farmControllerId) : null;
 
   const subject = `[${farmName}] ${rule.name}: ${formatPriority(rule.priority)}`;
-  const bodyLines = [
-    `Farm ID: ${escapeHtml(farmControllerId ?? "All farms")}`,
-    `Farm Name: ${escapeHtml(farmName)}`,
-    `Date/Time: ${escapeHtml(formatDateTime(alertTime))}`,
+  const plainLines = [
+    `Farm ID: ${farmControllerId ?? "All farms"}`,
+    `Farm Name: ${farmName}`,
+    `Date/Time: ${formatDateTime(alertTime)}`,
     "",
-    `Rule Name: ${escapeHtml(rule.name)}`,
-    `Priority: ${escapeHtml(formatPriority(rule.priority))}`,
-    `Metric: ${escapeHtml(rule.metric_key)}`,
-    `Threshold Value: ${escapeHtml(formatValue(condition?.value))}`,
-    `Current Value: ${escapeHtml(formatValue(context?.latest_value))}`,
-    `Condition: ${escapeHtml(condition?.operator ?? "N/A")}`,
+    `Rule Name: ${rule.name}`,
+    `Priority: ${formatPriority(rule.priority)}`,
+    `Metric: ${rule.metric_key}`,
+    `Threshold Value: ${formatValue(condition?.value)}`,
+    `Current Value: ${formatValue(context?.latest_value)}`,
+    `Condition: ${condition?.operator ?? "N/A"}`,
     "",
-    `View Alert at: ${viewUrl ? `<a href="${escapeHtml(viewUrl)}">${escapeHtml(viewUrl)}</a>` : "N/A"}`,
+    `View Alert at: ${viewUrl ?? "N/A"}`,
   ];
 
+  const emailLines = plainLines.map((line) => {
+    if (viewUrl && line === `View Alert at: ${viewUrl}`) {
+      return `View Alert at: <a href="${escapeHtml(viewUrl)}">${escapeHtml(viewUrl)}</a>`;
+    }
+
+    return escapeHtml(line);
+  });
+
+  const smsBody = [
+    `[${farmName}] ${rule.name}: ${formatPriority(rule.priority)}`,
+    `${rule.metric_key} ${condition?.operator ?? "triggered"} ${formatValue(condition?.value)}; current ${formatValue(context?.latest_value)}.`,
+    viewUrl ? `View: ${viewUrl}` : "",
+  ].filter(Boolean).join("\n");
+
   return {
-    subject,
-    body: bodyLines.join("<br />\n"),
+    emailSubject: subject,
+    emailBody: emailLines.join("<br />\n"),
+    smsBody,
   };
 }
 
-async function loadEmailRecipientChannels(rule: AlertRule): Promise<EmailRecipientChannel[]> {
+async function loadRecipientChannels(rule: AlertRule): Promise<AlertRecipientChannel[]> {
   const result = await pool.query(
     `
       SELECT
         rec.id::text AS recipient_id,
         rec.name AS recipient_name,
         arc.id::text AS channel_id,
+        arc.channel_type,
         arc.destination
       FROM alert_rule_recipients arr
       JOIN alert_recipients rec
@@ -209,7 +233,7 @@ async function loadEmailRecipientChannels(rule: AlertRule): Promise<EmailRecipie
         AND arr.enabled = true
         AND rec.enabled = true
         AND arc.enabled = true
-        AND arc.channel_type = 'email'
+        AND arc.channel_type IN ('email', 'sms')
         AND CASE arc.priority_minimum
           WHEN 'emergency' THEN 100
           WHEN 'critical' THEN 75
@@ -217,7 +241,7 @@ async function loadEmailRecipientChannels(rule: AlertRule): Promise<EmailRecipie
           WHEN 'info' THEN 25
           ELSE 0
         END <= $2
-      ORDER BY rec.name ASC, arc.destination ASC;
+      ORDER BY rec.name ASC, arc.channel_type ASC, arc.destination ASC;
     `,
     [rule.id, priorityWeight(rule.priority)],
   );
@@ -227,8 +251,8 @@ async function loadEmailRecipientChannels(rule: AlertRule): Promise<EmailRecipie
 
 async function reserveNotification(
   eventId: string,
-  channel: EmailRecipientChannel,
-  subject: string,
+  channel: AlertRecipientChannel,
+  subject: string | null,
   body: string,
 ) {
   const result = await pool.query(
@@ -244,7 +268,7 @@ async function reserveNotification(
         body,
         status
       )
-      VALUES ($1, $2, $3, 'email', 'clicksend', $4, $5, $6, 'pending')
+      VALUES ($1, $2, $3, $4, 'clicksend', $5, $6, $7, 'pending')
       ON CONFLICT (alert_event_id, alert_recipient_channel_id, channel_type)
         WHERE alert_recipient_channel_id IS NOT NULL
       DO NOTHING
@@ -254,6 +278,7 @@ async function reserveNotification(
       eventId,
       channel.recipient_id,
       channel.channel_id,
+      channel.channel_type,
       channel.destination,
       subject,
       body,
@@ -298,7 +323,7 @@ async function markNotificationFailed(notificationId: string, errorMessage: stri
   );
 }
 
-async function sendClickSendEmail(channel: EmailRecipientChannel, subject: string, body: string) {
+async function sendClickSendEmail(channel: AlertRecipientChannel, subject: string, body: string) {
   const fromAddressId = Number(process.env.CLICKSEND_EMAIL_FROM_ADDRESS_ID);
   if (!Number.isFinite(fromAddressId) || fromAddressId <= 0) {
     throw new Error("CLICKSEND_EMAIL_FROM_ADDRESS_ID must be a positive number.");
@@ -338,36 +363,83 @@ async function sendClickSendEmail(channel: EmailRecipientChannel, subject: strin
   };
 }
 
+async function sendClickSendSms(channel: AlertRecipientChannel, body: string) {
+  const response = await fetch("https://rest.clicksend.com/v3/sms/send", {
+    method: "POST",
+    headers: {
+      Authorization: clickSendAuthHeader(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messages: [
+        {
+          source: process.env.CLICKSEND_SMS_SOURCE ?? "OpenCEA",
+          body,
+          to: channel.destination,
+        },
+      ],
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || payload?.response_code !== "SUCCESS") {
+    throw new Error(payload?.response_msg ?? `ClickSend SMS request failed with HTTP ${response.status}.`);
+  }
+
+  const firstMessage = Array.isArray(payload?.data?.messages) ? payload.data.messages[0] : null;
+
+  return {
+    payload,
+    messageId: firstMessage?.message_id ? String(firstMessage.message_id) : null,
+  };
+}
+
+function channelConfigurationError(channel: AlertRecipientChannel) {
+  if (!isClickSendConfigured()) {
+    return "ClickSend credentials are not configured.";
+  }
+
+  if (channel.channel_type === "email" && !isEmailNotificationsConfigured()) {
+    return "ClickSend email credentials are not configured.";
+  }
+
+  return null;
+}
+
 export async function sendAlertNotificationsForEvent(eventId: string | number | undefined, rule: AlertRule) {
   if (!eventId) {
     return [] satisfies AlertNotificationSendResult[];
   }
 
   const eventIdText = String(eventId);
-  const channels = await loadEmailRecipientChannels(rule);
-  const context = await loadAlertEmailContext(eventIdText);
-  const { subject, body } = buildAlertEmail(rule, eventIdText, context);
+  const channels = await loadRecipientChannels(rule);
+  const context = await loadAlertNotificationContext(eventIdText);
+  const messages = buildAlertMessages(rule, context);
   const results: AlertNotificationSendResult[] = [];
 
-  if (channels.length === 0) {
-    return results;
-  }
-
-  if (!isEmailNotificationsConfigured()) {
-    return channels.map((channel) => ({
-      channelId: channel.channel_id,
-      destination: channel.destination,
-      action: "skipped",
-      error: "ClickSend email credentials are not configured.",
-    }));
-  }
-
   for (const channel of channels) {
+    const subject = channel.channel_type === "email" ? messages.emailSubject : null;
+    const body = channel.channel_type === "email" ? messages.emailBody : messages.smsBody;
+    const configurationError = channelConfigurationError(channel);
+
+    if (configurationError) {
+      results.push({
+        channelId: channel.channel_id,
+        channelType: channel.channel_type,
+        destination: channel.destination,
+        action: "skipped",
+        error: configurationError,
+      });
+      continue;
+    }
+
     const notificationId = await reserveNotification(eventIdText, channel, subject, body);
 
     if (!notificationId) {
       results.push({
         channelId: channel.channel_id,
+        channelType: channel.channel_type,
         destination: channel.destination,
         action: "skipped",
         error: "Notification already exists for this alert event and channel.",
@@ -376,20 +448,26 @@ export async function sendAlertNotificationsForEvent(eventId: string | number | 
     }
 
     try {
-      const sendResult = await sendClickSendEmail(channel, subject, body);
+      const sendResult = channel.channel_type === "email"
+        ? await sendClickSendEmail(channel, messages.emailSubject, messages.emailBody)
+        : await sendClickSendSms(channel, messages.smsBody);
+
       await markNotificationSent(notificationId, sendResult.messageId, sendResult.payload);
       results.push({
         channelId: channel.channel_id,
+        channelType: channel.channel_type,
         destination: channel.destination,
         action: "sent",
         notificationId,
         providerMessageId: sendResult.messageId,
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown ClickSend email error";
+      const channelLabel = channel.channel_type === "email" ? "email" : "SMS";
+      const errorMessage = error instanceof Error ? error.message : `Unknown ClickSend ${channelLabel} error`;
       await markNotificationFailed(notificationId, errorMessage);
       results.push({
         channelId: channel.channel_id,
+        channelType: channel.channel_type,
         destination: channel.destination,
         action: "failed",
         notificationId,
