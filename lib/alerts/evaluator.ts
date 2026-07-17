@@ -2,6 +2,7 @@ import { Engine, RuleProperties } from "json-rules-engine";
 import { pool } from "@/lib/db";
 import { resolveFarmSelection } from "@/lib/farms";
 import { collectMonitoringFacts } from "./facts";
+import { sendAlertNotificationsForEvent } from "./notifications";
 import { AlertRuleSchema, type AlertEvaluationResult, type AlertFacts, type AlertRule } from "./types";
 
 function toRuleProperties(rule: AlertRule): RuleProperties {
@@ -33,6 +34,14 @@ function priorityWeight(priority: AlertRule["priority"]) {
 
 function jsonValue(value: unknown) {
   return value === undefined ? null : value;
+}
+
+function shouldNotifyForEventAction(eventAction: { action?: string; status?: string }) {
+  return (
+    (eventAction.action === "created" && eventAction.status === "active") ||
+    eventAction.action === "activated" ||
+    eventAction.action === "reactivated"
+  );
 }
 
 async function loadEnabledRules(): Promise<AlertRule[]> {
@@ -273,6 +282,9 @@ export async function evaluateAlerts() {
 
     const evaluation = await evaluateRule(rule);
     const eventAction = await upsertAlertEvent(evaluation);
+    const notificationResults = shouldNotifyForEventAction(eventAction)
+      ? await sendAlertNotificationsForEvent(eventAction.eventId, rule)
+      : [];
 
     results.push({
       ruleId: rule.id,
@@ -280,6 +292,7 @@ export async function evaluateAlerts() {
       triggered: evaluation.triggered,
       value: evaluation.value,
       eventAction,
+      notificationResults,
     });
   }
 
