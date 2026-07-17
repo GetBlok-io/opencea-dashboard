@@ -5,7 +5,7 @@ const dashboardPath = path.join(__dirname, "..", "components", "Dashboard.tsx");
 const globalsPath = path.join(__dirname, "..", "app", "globals.css");
 let source = fs.readFileSync(dashboardPath, "utf8");
 
-function replaceOnce(search, replacement, label) {
+function patchSource(search, replacement, label) {
   if (!source.includes(search)) {
     console.log(`${label} already present or pattern not found.`);
     return false;
@@ -15,9 +15,18 @@ function replaceOnce(search, replacement, label) {
   return true;
 }
 
-const optionMarker = "const ALERT_SUPPRESSION_OPTIONS = [";
-if (!source.includes(optionMarker)) {
-  replaceOnce(
+function patchRegex(regex, replacement, label) {
+  if (!regex.test(source)) {
+    console.log(`${label} already present or pattern not found.`);
+    return false;
+  }
+  source = source.replace(regex, replacement);
+  console.log(`Patched ${label}.`);
+  return true;
+}
+
+if (!source.includes("const ALERT_SUPPRESSION_OPTIONS = [")) {
+  patchSource(
     'const ALERT_PRIORITIES = ["info", "warning", "critical", "emergency"] as const;\n',
     'const ALERT_PRIORITIES = ["info", "warning", "critical", "emergency"] as const;\n\nconst ALERT_SUPPRESSION_OPTIONS = [\n  { label: "1 hour", minutes: 60 },\n  { label: "12 hours", minutes: 720 },\n  { label: "24 hours", minutes: 1440 },\n] as const;\n',
     "alert suppression options",
@@ -26,9 +35,8 @@ if (!source.includes(optionMarker)) {
   console.log("Alert suppression options already present.");
 }
 
-const stateMarker = "const [suppressDurationByEventId, setSuppressDurationByEventId]";
-if (!source.includes(stateMarker)) {
-  replaceOnce(
+if (!source.includes("const [suppressDurationByEventId, setSuppressDurationByEventId]")) {
+  patchSource(
     '  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);\n  const editingRule = rules.find((rule) => rule.id === editingRuleId) ?? null;\n',
     '  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);\n  const [suppressDurationByEventId, setSuppressDurationByEventId] = useState<Record<string, number>>({});\n  const editingRule = rules.find((rule) => rule.id === editingRuleId) ?? null;\n\n  function selectedSuppressionMinutes(eventId: string) {\n    return suppressDurationByEventId[eventId] ?? ALERT_SUPPRESSION_OPTIONS[0].minutes;\n  }\n',
     "alert suppression duration state",
@@ -37,65 +45,22 @@ if (!source.includes(stateMarker)) {
   console.log("Alert suppression duration state already present.");
 }
 
-const oldSuppressFunction = `  async function suppressAlertEvent(event: AlertEventRow) {
-    const answer = window.prompt(
-      "Suppress this alert for how long?\\n\\nEnter one of: 1h, 12h, 24h\\nOr enter minutes, such as 60.",
-      "1h",
-    );
-
-    if (!answer) {
-      return;
-    }
-
-    const normalized = answer.trim().toLowerCase();
-    const suppressMinutesByLabel: Record<string, number> = {
-      "1h": 60,
-      "1hr": 60,
-      "1 hour": 60,
-      "12h": 720,
-      "12hr": 720,
-      "12 hours": 720,
-      "24h": 1440,
-      "24hr": 1440,
-      "24 hours": 1440,
-    };
-
-    const suppressMinutes = suppressMinutesByLabel[normalized] ?? Number(normalized);
-
-    if (!Number.isInteger(suppressMinutes) || suppressMinutes <= 0) {
-      window.alert("Enter a valid suppression duration, such as 1h, 12h, 24h, or 60.");
-      return;
-    }
-
-    await updateAlertEvent(event, "suppress", suppressMinutes);
-  }
-`;
-
 const newSuppressFunction = `  async function suppressAlertEvent(event: AlertEventRow) {
     await updateAlertEvent(event, "suppress", selectedSuppressionMinutes(event.id));
   }
 `;
 
-if (source.includes(oldSuppressFunction)) {
-  source = source.replace(oldSuppressFunction, newSuppressFunction);
-  console.log("Patched prompt suppression handler.");
-} else if (source.includes('selectedSuppressionMinutes(event.id)')) {
-  console.log("Prompt suppression handler already replaced.");
+if (!source.includes('selectedSuppressionMinutes(event.id)')) {
+  patchRegex(
+    /  async function suppressAlertEvent\(event: AlertEventRow\) \{[\s\S]*?  async function toggleRuleEnabled\(rule: AlertRuleRow\) \{/,
+    `${newSuppressFunction}\n  async function toggleRuleEnabled(rule: AlertRuleRow) {`,
+    "prompt suppression handler",
+  );
 } else {
-  console.log("Prompt suppression handler pattern not found; leaving unchanged.");
+  console.log("Prompt suppression handler already replaced.");
 }
 
-const oldSuppressButton = `                  <button
-                    type="button"
-                    className="icon-button suppress-icon-button"
-                    onClick={() => void suppressAlertEvent(event)}
-                    title="Suppress alert"
-                    aria-label={\`Suppress \${event.rule_name}\`}
-                  >
-                    ⏸
-                  </button>`;
-
-const newSuppressButton = `                  <span className="suppression-control">
+const newSuppressControl = `                  <span className="suppression-control">
                     <select
                       className="suppression-select"
                       value={selectedSuppressionMinutes(event.id)}
@@ -126,20 +91,20 @@ const newSuppressButton = `                  <span className="suppression-contro
                     </button>
                   </span>`;
 
-if (source.includes(oldSuppressButton)) {
-  source = source.replace(oldSuppressButton, newSuppressButton);
-  console.log("Patched suppress action dropdown.");
-} else if (source.includes('className="suppression-control"')) {
-  console.log("Suppress action dropdown already present.");
+if (!source.includes('className="suppression-control"')) {
+  patchRegex(
+    /                  <button\n                    type="button"\n                    className="icon-button suppress-icon-button"\n                    onClick=\{\(\) => void suppressAlertEvent\(event\)\}\n                    title="Suppress alert"\n                    aria-label=\{`Suppress \$\{event\.rule_name\}`\}\n                  >\n                    ⏸\n                  <\/button>/,
+    newSuppressControl,
+    "suppress action dropdown",
+  );
 } else {
-  console.log("Suppress action button pattern not found; leaving unchanged.");
+  console.log("Suppress action dropdown already present.");
 }
 
 fs.writeFileSync(dashboardPath, source);
 
 let css = fs.readFileSync(globalsPath, "utf8");
-const cssMarker = ".suppression-control";
-if (!css.includes(cssMarker)) {
+if (!css.includes(".suppression-control")) {
   css += `
 
 .suppression-control {
