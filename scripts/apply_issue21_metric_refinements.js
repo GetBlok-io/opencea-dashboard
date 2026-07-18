@@ -9,14 +9,4 @@ function patchRegex(source, pattern, replacement, label) {
     console.log('Skipped ' + label);
     return source;
   }
-  console.log('Patched ' + label);
-  return source.replace(pattern, replacement);
-}
-
-const valueHelpers = [
-  'function formatOneDecimal(value: number) {',
-  '  return value.toFixed(1);',
-  '}',
-  '',
-  'function formatPercent(value: number) {',
-  '  return formatOne
+  console
