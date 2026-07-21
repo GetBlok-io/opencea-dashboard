@@ -597,3 +597,333 @@ button.toggle.active { background: var(--accent); color: #04111d; }
   border-color: rgba(248, 113, 113, 0.4);
   color: rgb(252, 165, 165);
 }
+
+
+/* Issue 21 compact monitoring layout */
+.monitoring-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.compact-zone-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100%;
+}
+
+.compact-zone-header {
+  align-items: flex-start;
+}
+
+.compact-monitoring-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-top: 0.75rem;
+}
+
+.compact-metric-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.compact-metric-section h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.compact-metric-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.compact-metric-tile {
+  display: grid;
+  grid-template-columns: 3.35rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+  border: 1px solid #dbe4ee;
+  border-radius: 0.9rem;
+  padding: 0.65rem 0.75rem;
+  background: #f8fafc;
+}
+
+.compact-metric-token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.compact-metric-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.compact-metric-copy span {
+  min-width: 0;
+  color: #475569;
+  font-size: 0.86rem;
+  line-height: 1.2;
+}
+
+.compact-metric-copy strong {
+  color: #0f172a;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.compact-metric-warning {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.compact-metric-warning .compact-metric-token {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.compact-metric-active .compact-metric-token {
+  background: #dcfce7;
+  color: #166534;
+}
+
+@media (max-width: 1180px) {
+  .monitoring-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-metric-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .compact-metric-list {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-metric-tile {
+    grid-template-columns: 3rem minmax(0, 1fr);
+  }
+
+  .compact-metric-copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
+
+
+/* Issue 21 compact monitoring desktop column fix */
+@media (min-width: 900px) {
+  .compact-monitoring-columns {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(260px, 1fr)) !important;
+    gap: 1rem !important;
+    align-items: start !important;
+  }
+
+  .compact-monitoring-columns > .compact-zone-panel {
+    min-width: 0;
+    min-height: 100%;
+  }
+
+  .compact-monitoring-columns .compact-metric-list {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .compact-monitoring-columns {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  .compact-monitoring-columns .compact-metric-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .compact-monitoring-columns .compact-metric-list {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
+/* Issue 21 compact monitoring header and icon tuning */
+.farm-inline-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.farm-inline-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  border: 1px solid #dbe4ee;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.92);
+  padding: 0.32rem 0.65rem;
+}
+
+.farm-inline-stat small {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.farm-inline-stat strong {
+  color: #0f172a;
+  font-size: 0.83rem;
+  font-weight: 800;
+}
+
+.farm-inline-stat-wide strong {
+  font-size: 0.78rem;
+}
+
+.compact-summary {
+  display: none !important;
+}
+
+.compact-metric-tile {
+  padding: 0.5rem 0.62rem;
+  border-radius: 0.75rem;
+}
+
+.compact-metric-token {
+  min-height: 1.9rem;
+  width: 2.45rem;
+  min-width: 2.45rem;
+  padding: 0 0.35rem;
+  font-size: 1rem;
+}
+
+.compact-metric-copy span {
+  font-size: 0.8rem;
+}
+
+.compact-metric-copy strong {
+  font-size: 0.95rem;
+}
+
+
+/* Issue 21 metric visual tuning */
+.compact-metric-tile {
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  background: rgba(15, 23, 42, 0.24) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+.compact-metric-tile.no-icon {
+  grid-template-columns: 1fr;
+}
+
+.compact-metric-token {
+  min-height: 1.8rem;
+  width: 1.8rem;
+  min-width: 1.8rem;
+  justify-self: center;
+  background: rgba(14, 165, 233, 0.12) !important;
+  color: #bae6fd !important;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  font-size: 0.82rem;
+}
+
+.compact-metric-copy {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center !important;
+  gap: 0.55rem !important;
+}
+
+.compact-metric-copy span {
+  color: rgba(226, 232, 240, 0.82) !important;
+}
+
+.compact-metric-copy strong {
+  color: #f8fafc !important;
+  font-weight: 800;
+}
+
+.metric-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.12rem 0.42rem;
+  min-width: 3rem;
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.metric-status-ok {
+  color: #bbf7d0;
+  background: rgba(22, 163, 74, 0.24);
+  border: 1px solid rgba(134, 239, 172, 0.22);
+}
+
+.metric-status-warning {
+  color: #fde68a;
+  background: rgba(217, 119, 6, 0.24);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+
+.metric-status-alert {
+  color: #fecaca;
+  background: rgba(220, 38, 38, 0.25);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+}
+
+.compact-metric-alert {
+  border-color: rgba(248, 113, 113, 0.45) !important;
+  background: rgba(127, 29, 29, 0.24) !important;
+}
+
+.compact-metric-warning {
+  border-color: rgba(251, 191, 36, 0.42) !important;
+  background: rgba(120, 53, 15, 0.22) !important;
+}
+
+.compact-metric-normal {
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+@media (max-width: 760px) {
+  .compact-metric-copy {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .metric-status-pill {
+    grid-column: 2;
+  }
+}

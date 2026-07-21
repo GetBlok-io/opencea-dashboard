@@ -480,7 +480,10 @@ function formatValue(value: unknown, metric: Metric, temperatureUnit: Temperatur
       return `${converted.toFixed(1)} °${temperatureUnit}`;
     }
 
-    return Number.isInteger(value) ? value.toString() : value.toFixed(2);
+    const alias = normalizeText(metric.aliasKey);
+    const label = normalizeText(metric.label);
+    if (alias.includes("humidity") || label.includes("humidity")) return formatPercent(value);
+    return formatNumber(value);
   }
 
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -492,7 +495,7 @@ function valueClass(metric: Metric) {
   if (typeof metric.value !== "number") return undefined;
 
   if (isContainerNutrientLevelMetric(metric) && metric.value === 1) return "alert-value";
-  if (isTroughLevelMetric(metric) && metric.value === 1) return "alert-value";
+  if (isTroughLevelMetric(metric) && metric.value !== 1) return "alert-value";
   if ((isPumpMetric(metric) || isOutputMetric(metric)) && metric.value === 1) return "active-value";
 
   return undefined;
@@ -712,7 +715,7 @@ function ToggleMetricCard({ metric }: { metric: Metric }) {
   return (
     <div className="metric switch-metric" key={metric.id}>
       <div>
-        <span>{metric.label}</span>
+        <span>{displayMetricLabel(metric)}</span>
         <small className="module-id">{metric.deviceId} · {metric.key}</small>
       </div>
       <div className="switch-wrap" aria-label={`${metric.label} is ${enabled ? "ON" : "OFF"}`}>
@@ -731,7 +734,7 @@ function MetricCard({ metric, temperatureUnit }: { metric: Metric; temperatureUn
 
   return (
     <div className="metric" key={metric.id}>
-      <span>{metric.label}</span>
+      <span>{displayMetricLabel(metric)}</span>
       <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
       <small className="module-id">{metric.deviceId} · {metric.key}</small>
     </div>
@@ -821,7 +824,7 @@ function ZoneMetricRow({
           <div className="nested-metric-grid">
             {metrics.map((metric) => (
               <div className="nested-metric" key={metric.id}>
-                <span>{metric.label}</span>
+                <span>{displayMetricLabel(metric)}</span>
                 <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
                 <small className="module-id">{metric.deviceId} · {metric.key}</small>
               </div>
@@ -839,9 +842,122 @@ function ZoneMetricRow({
   );
 }
 
+
+function displayMetricLabel(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  if (alias === "nutrient_a_level") return "Nutrient A";
+  if (alias === "nutrient_b_level") return "Nutrient B";
+  if (alias === "nutrient_c_level" || alias === "boost_level") return "Nutrient C";
+  if (alias === "ph_up_level") return "pH Up";
+  if (alias === "ph_down_level") return "pH Down";
+  return metric.label || metric.key;
+}
+
+function compactMetricToken(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  const label = normalizeText(metric.label);
+  if (alias.includes("temperature") || label.includes("temperature")) return "🌡️";
+  if (alias.includes("humidity") || label.includes("humidity")) return "💧";
+  if (alias.includes("co2") || label.includes("co2")) return "CO₂";
+  if (alias.includes("ph") || label.includes("ph")) return "pH";
+  if (alias.includes("ec") || label.includes("ec")) return "⚡";
+  if (isContainerNutrientLevelMetric(metric)) return "🧪";
+  return "";
+}
+
+function compactMetricStatus(metric: Metric) {
+  if (typeof metric.value !== "number") return null;
+
+  if (isTankDepthMetric(metric)) {
+    if (metric.value >= 95) return { label: "FULL", className: "metric-status-ok" };
+    if (metric.value >= 50) return { label: "OK", className: "metric-status-ok" };
+    if (metric.value >= 20) return { label: "LOW", className: "metric-status-warning" };
+    return { label: "EMPTY", className: "metric-status-alert" };
+  }
+
+  if (isTroughLevelMetric(metric)) {
+    return metric.value === 1
+      ? { label: "EMPTY", className: "metric-status-ok" }
+      : { label: "FULL", className: "metric-status-alert" };
+  }
+
+  if (isContainerNutrientLevelMetric(metric)) {
+    return metric.value === 1
+      ? { label: "LOW", className: "metric-status-alert" }
+      : { label: "OK", className: "metric-status-ok" };
+  }
+
+  return null;
+}
+
+function compactMetricStateClass(metric: Metric) {
+  const status = compactMetricStatus(metric);
+  if (status?.className === "metric-status-alert") return "compact-metric-alert";
+  if (status?.className === "metric-status-warning") return "compact-metric-warning";
+  const valueClassName = valueClass(metric);
+  if (valueClassName === "alert-value") return "compact-metric-alert";
+  if (valueClassName === "active-value") return "compact-metric-active";
+  return "compact-metric-normal";
+}
+
+function compactSupplySortPriority(metric: Metric) {
+  const alias = normalizeText(metric.aliasKey);
+  const label = normalizeText(metric.label);
+  if (alias.includes("nutrient_a") || label.includes("nutrient a")) return 0;
+  if (alias.includes("nutrient_b") || label.includes("nutrient b")) return 1;
+  if (alias.includes("nutrient_c") || label.includes("nutrient c")) return 2;
+  if (alias.includes("ph_down") || label.includes("ph down")) return 3;
+  if (alias.includes("ph_up") || label.includes("ph up")) return 4;
+  if (alias.includes("boost") || label.includes("boost")) return 5;
+  return 10;
+}
+
+function sortCompactMetrics(a: Metric, b: Metric) {
+  if (isContainerNutrientLevelMetric(a) || isContainerNutrientLevelMetric(b)) {
+    const supplyDelta = compactSupplySortPriority(a) - compactSupplySortPriority(b);
+    if (supplyDelta !== 0) return supplyDelta;
+  }
+  return sortMetrics(a, b);
+}
+
+function aliasIn(metric: Metric, aliases: string[]) {
+  const alias = normalizeText(metric.aliasKey);
+  return aliases.includes(alias);
+}
+
+function CompactMetricTile({ metric, temperatureUnit }: { metric: Metric; temperatureUnit: TemperatureUnit }) {
+  const token = compactMetricToken(metric);
+  const status = compactMetricStatus(metric);
+
+  return (
+    <div className={`compact-metric-tile ${compactMetricStateClass(metric)} ${token ? "has-icon" : "no-icon"}`}>
+      {token ? <span className="compact-metric-token">{token}</span> : null}
+      <div className="compact-metric-copy">
+        <span>{metric.label}</span>
+        <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
+        {status ? <em className={`metric-status-pill ${status.className}`}>{status.label}</em> : null}
+      </div>
+    </div>
+  );
+}
+
+function CompactMetricSection({ title, metrics, temperatureUnit }: { title: string; metrics: Metric[]; temperatureUnit: TemperatureUnit }) {
+  if (metrics.length === 0) return null;
+  return (
+    <section className="compact-metric-section">
+      <h3>{title}</h3>
+      <div className="compact-metric-list">
+        {metrics.map((metric) => (
+          <CompactMetricTile key={metric.id} metric={metric} temperatureUnit={temperatureUnit} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ZoneMonitoringSection({
   group,
-  history,
+  history: _history,
   temperatureUnit,
 }: {
   group: ZoneGroup;
@@ -853,47 +969,66 @@ function ZoneMonitoringSection({
     .filter((value): value is string => Boolean(value))
     .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
 
-  const zoneCharts = CHARTS.filter((chart) => chart.zone === group.zone);
-  const nonChartMetrics = group.metrics.filter((metric) => !isChartedMetric(metric) && !isControlMetric(metric));
-  const primary = nonChartMetrics.filter((metric) => getMetricRow(metric) === "primary").sort(sortMetrics);
-  const secondary = nonChartMetrics.filter((metric) => getMetricRow(metric) === "secondary").sort(sortMetrics);
-  const other = nonChartMetrics.filter((metric) => getMetricRow(metric) === "other").sort(sortMetrics);
+  const monitoringMetrics = group.metrics
+    .filter((metric) => !isControlMetric(metric))
+    .sort(sortCompactMetrics);
+
+  const containerClimate = monitoringMetrics.filter((metric) => aliasIn(metric, ["air_temperature", "relative_humidity", "co2"]));
+  const containerSupply = monitoringMetrics.filter(isContainerNutrientLevelMetric);
+  const nurseryChemistry = monitoringMetrics.filter((metric) => aliasIn(metric, ["nursery_ph", "nursery_ec", "nursery_tank_depth", "nursery_water_temperature"]));
+  const nurseryLevels = monitoringMetrics.filter((metric) => isTroughLevelMetric(metric));
+  const cultivationChemistry = monitoringMetrics.filter((metric) => aliasIn(metric, ["cultivation_ph", "cultivation_ec", "cultivation_water_temperature"]));
+  const cultivationHydraulics = monitoringMetrics.filter((metric) => isTankDepthMetric(metric) || isSendPressureMetric(metric));
+
+  const alreadyDisplayed = new Set([
+    ...containerClimate,
+    ...containerSupply,
+    ...nurseryChemistry,
+    ...nurseryLevels,
+    ...cultivationChemistry,
+    ...cultivationHydraulics,
+  ].map((metric) => metric.id));
+
+  const otherMetrics = monitoringMetrics.filter((metric) => !alreadyDisplayed.has(metric.id));
 
   return (
-    <article className="monitoring-zone-panel">
-      <div className="zone-card-header">
+    <article className={`monitoring-zone-panel compact-zone-panel compact-zone-${group.zone.toLowerCase()}`}>
+      <div className="zone-card-header compact-zone-header">
         <div>
           <p className="zone-kicker">Monitoring</p>
-          <h2>{group.zone}</h2>
+          <h2>{group.zone === "Container" ? "Container-Wide" : group.zone}</h2>
         </div>
-        <span className="metric-count">{group.metrics.length} values</span>
+        <span className="metric-count">{monitoringMetrics.length} values</span>
       </div>
 
       <p className="timestamp">Updated: {formatDate(latestUpdate)}</p>
 
-      {zoneCharts.length > 0 ? (
-        <section className={`zone-chart-grid zone-chart-grid-${group.zone.toLowerCase()}`}>
-          {zoneCharts.map((chart) => (
-            <ChartCard
-              key={chart.aliasKey}
-              chart={chart}
-              history={history}
-              currentValue={getLatestMetricValue([group], chart.aliasKey)}
-              temperatureUnit={temperatureUnit}
-            />
-          ))}
-        </section>
-      ) : null}
+      <div className="compact-monitoring-stack">
+        {group.zone === "Container" ? (
+          <>
+            <CompactMetricSection title="Farm-wide climate" metrics={containerClimate} temperatureUnit={temperatureUnit} />
+            <CompactMetricSection title="Nutrient and pH supply tanks" metrics={containerSupply} temperatureUnit={temperatureUnit} />
+          </>
+        ) : null}
 
-      {nonChartMetrics.length > 0 ? (
-        <div className="zone-row-stack">
-          <ZoneMetricRow zone={group.zone} row="primary" metrics={primary} temperatureUnit={temperatureUnit} />
-          <ZoneMetricRow zone={group.zone} row="secondary" metrics={secondary} temperatureUnit={temperatureUnit} />
-          <ZoneMetricRow zone={group.zone} row="other" metrics={other} temperatureUnit={temperatureUnit} />
-        </div>
-      ) : null}
+        {group.zone === "Nursery" ? (
+          <>
+            <CompactMetricSection title="Water chemistry" metrics={nurseryChemistry} temperatureUnit={temperatureUnit} />
+            <CompactMetricSection title="Tank and trough levels" metrics={nurseryLevels} temperatureUnit={temperatureUnit} />
+          </>
+        ) : null}
 
-      {group.metrics.length === 0 ? (
+        {group.zone === "Cultivation" ? (
+          <>
+            <CompactMetricSection title="Water chemistry" metrics={cultivationChemistry} temperatureUnit={temperatureUnit} />
+            <CompactMetricSection title="Tank depth and send pressure" metrics={cultivationHydraulics} temperatureUnit={temperatureUnit} />
+          </>
+        ) : null}
+
+        <CompactMetricSection title="Other monitoring values" metrics={otherMetrics} temperatureUnit={temperatureUnit} />
+      </div>
+
+      {monitoringMetrics.length === 0 ? (
         <div className="empty-zone">No connected mapped values found for this zone.</div>
       ) : null}
     </article>
@@ -2117,7 +2252,7 @@ const refresh = useCallback(async (showLoading = true, controllerId = selectedCo
       {error ? <div className="error-box">{error}</div> : null}
 
       {activeSection === "monitoring" ? (
-        <section className="monitoring-zone-stack">
+        <section className="monitoring-zone-stack compact-monitoring-columns">
           {zoneGroups.map((group) => (
             <ZoneMonitoringSection
               key={group.zone}
