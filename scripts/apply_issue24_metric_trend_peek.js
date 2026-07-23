@@ -16,15 +16,6 @@ function replaceOnce(source, search, replacement, label) {
   return source.replace(search, replacement);
 }
 
-function replaceRegex(source, pattern, replacement, label) {
-  if (!pattern.test(source)) {
-    console.log('Skipped ' + label);
-    return source;
-  }
-  console.log('Patched ' + label);
-  return source.replace(pattern, replacement);
-}
-
 const trendHelpers = `function getMetricTrendData(history: HistoryPoint[], metric: Metric, temperatureUnit: TemperatureUnit) {
   const alias = normalizeText(metric.aliasKey);
   const zone = normalizeText(metric.zone);
@@ -176,9 +167,28 @@ dashboard = replaceOnce(
   'zone monitoring history argument'
 );
 
+const sectionCalls = [
+  `<CompactMetricSection title="Farm-wide climate" metrics={containerClimate} temperatureUnit={temperatureUnit} />`,
+  `<CompactMetricSection title="Nutrient and pH supply tanks" metrics={containerSupply} temperatureUnit={temperatureUnit} />`,
+  `<CompactMetricSection title="Water chemistry" metrics={nurseryChemistry} temperatureUnit={temperatureUnit} />`,
+  `<CompactMetricSection title="Tank and trough levels" metrics={nurseryLevels} temperatureUnit={temperatureUnit} />`,
+  `<CompactMetricSection title="Water chemistry" metrics={cultivationChemistry} temperatureUnit={temperatureUnit} />`,
+  `<CompactMetricSection title="Tank depth and send pressure" metrics={cultivationHydraulics} temperatureUnit={temperatureUnit} />`,
+  `<CompactMetricSection title="Other monitoring values" metrics={otherMetrics} temperatureUnit={temperatureUnit} />`
+];
+
+for (const call of sectionCalls) {
+  dashboard = replaceOnce(
+    dashboard,
+    call,
+    call.replace(' temperatureUnit={temperatureUnit}', ' history={history} temperatureUnit={temperatureUnit}'),
+    'compact metric section history prop'
+  );
+}
+
 dashboard = dashboard.replaceAll(
-  ` temperatureUnit={temperatureUnit} />`,
-  ` history={history} temperatureUnit={temperatureUnit} />`
+  `<MetricCard key={metric.id} metric={metric} history={history} temperatureUnit={temperatureUnit} />`,
+  `<MetricCard key={metric.id} metric={metric} temperatureUnit={temperatureUnit} />`
 );
 
 dashboard = dashboard.replaceAll(
