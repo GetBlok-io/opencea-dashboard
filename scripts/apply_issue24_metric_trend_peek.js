@@ -16,6 +16,15 @@ function replaceOnce(source, search, replacement, label) {
   return source.replace(search, replacement);
 }
 
+function replaceRegex(source, pattern, replacement, label) {
+  if (!pattern.test(source)) {
+    console.log('Skipped ' + label);
+    return source;
+  }
+  console.log('Patched ' + label);
+  return source.replace(pattern, replacement);
+}
+
 const trendHelpers = `function getMetricTrendData(history: HistoryPoint[], metric: Metric, temperatureUnit: TemperatureUnit) {
   const alias = normalizeText(metric.aliasKey);
   const zone = normalizeText(metric.zone);
@@ -54,22 +63,6 @@ if (!dashboard.includes('function getMetricTrendData(')) {
     'metric trend data helpers'
   );
 }
-
-const oldTile = `function CompactMetricTile({ metric, temperatureUnit }: { metric: Metric; temperatureUnit: TemperatureUnit }) {
-  const token = compactMetricToken(metric);
-  const status = compactMetricStatus(metric);
-
-  return (
-    <div className={\`compact-metric-tile \${compactMetricStateClass(metric)} \${token ? "has-icon" : "no-icon"}\`}>
-      {token ? <span className="compact-metric-token">{token}</span> : null}
-      <div className="compact-metric-copy">
-        <span>{metric.label}</span>
-        <strong className={valueClass(metric)}>{formatValue(metric.value, metric, temperatureUnit)}</strong>
-        {status ? <em className={\`metric-status-pill \${status.className}\`}>{status.label}</em> : null}
-      </div>
-    </div>
-  );
-}`;
 
 const newTile = `function CompactMetricTile({
   metric,
@@ -144,12 +137,17 @@ const newTile = `function CompactMetricTile({
   );
 }`;
 
-dashboard = replaceOnce(dashboard, oldTile, newTile, 'compact metric trend tile');
-
-dashboard = replaceOnce(
+dashboard = replaceRegex(
   dashboard,
-  `function CompactMetricSection({ title, metrics, temperatureUnit }: { title: string; metrics: Metric[]; temperatureUnit: TemperatureUnit }) {`,
-  `function CompactMetricSection({ title, metrics, history, temperatureUnit }: { title: string; metrics: Metric[]; history: HistoryPoint[]; temperatureUnit: TemperatureUnit }) {`,
+  /function CompactMetricTile\(\{[\s\S]*?\n\}\n\nfunction CompactMetricSection\(/,
+  newTile + '\n\nfunction CompactMetricSection(',
+  'compact metric trend tile'
+);
+
+dashboard = replaceRegex(
+  dashboard,
+  /function CompactMetricSection\(\{ title, metrics, temperatureUnit \}: \{ title: string; metrics: Metric\[\]; temperatureUnit: TemperatureUnit \}\)/,
+  'function CompactMetricSection({ title, metrics, history, temperatureUnit }: { title: string; metrics: Metric[]; history: HistoryPoint[]; temperatureUnit: TemperatureUnit })',
   'compact metric section signature'
 );
 
