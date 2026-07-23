@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/apply_monitoring_repair.js && node scripts/apply_issue24_metric_trend_peek.js && next dev",
-    "build": "node scripts/apply_monitoring_repair.js && node scripts/apply_issue24_metric_trend_peek.js && next build",
+    "dev": "node scripts/apply_monitoring_repair.js && node scripts/apply_issue24_metric_trend_peek.js && node scripts/apply_issue24_metric_trend_force.js && next dev",
+    "build": "node scripts/apply_monitoring_repair.js && node scripts/apply_issue24_metric_trend_peek.js && node scripts/apply_issue24_metric_trend_force.js && next build",
     "start": "next start",
     "lint": "next lint || true",
     "alerts:worker": "tsx -r tsconfig-paths/register scripts/alerts-worker.ts"
